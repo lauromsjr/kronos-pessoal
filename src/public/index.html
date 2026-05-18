@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kronos | Tarefas</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Sistema Kronos</p>
+          <h1>Tarefas</h1>
+        </div>
+        <button class="primary" id="addTaskBtn" type="button">+ Adicionar</button>
+      </header>
+
+      <section class="toolbar" aria-label="Filtros">
+        <nav class="tabs" aria-label="Listas">
+          <button class="tab active" data-list="Tarefa" type="button">Tarefas</button>
+          <button class="tab" data-list="Backlog" type="button">Backlog</button>
+          <button class="tab" data-list="Ideia" type="button">Ideias</button>
+        </nav>
+
+        <div class="filters">
+          <label>
+            Empresa
+            <select id="companyFilter">
+              <option value="">Todas</option>
+              <option>IbogaLiv</option>
+              <option>Olympus</option>
+              <option>PlugAI</option>
+              <option>Pessoal</option>
+            </select>
+          </label>
+          <label>
+            Impacto
+            <select id="impactFilter">
+              <option value="">Todos</option>
+              <option>Alto</option>
+              <option>Médio</option>
+              <option>Baixo</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="board" id="taskBoard" aria-live="polite"></section>
+    </main>
+
+    <dialog id="taskModal">
+      <form class="modal" id="taskForm" method="dialog">
+        <div class="modal-head">
+          <h2 id="modalTitle">Nova tarefa</h2>
+          <button class="icon" id="closeModalBtn" type="button" aria-label="Fechar">x</button>
+        </div>
+
+        <input type="hidden" id="taskId" />
+
+        <label>
+          Título
+          <input id="titleInput" required maxlength="160" />
+        </label>
+
+        <div class="grid-2">
+          <label>
+            Empresa
+            <select id="companyInput">
+              <option>IbogaLiv</option>
+              <option>Olympus</option>
+              <option>PlugAI</option>
+              <option>Pessoal</option>
+            </select>
+          </label>
+          <label>
+            Impacto
+            <select id="impactInput">
+              <option>Alto</option>
+              <option selected>Médio</option>
+              <option>Baixo</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="grid-2">
+          <label>
+            Lista
+            <select id="listInput">
+              <option>Tarefa</option>
+              <option>Backlog</option>
+              <option>Ideia</option>
+            </select>
+          </label>
+          <label>
+            Status
+            <select id="statusInput">
+              <option>A fazer</option>
+              <option>Em andamento</option>
+              <option>Concluída</option>
+              <option>Pausada</option>
+            </select>
+          </label>
+        </div>
+
+        <label>
+          Notas
+          <textarea id="notesInput" rows="5"></textarea>
+        </label>
+
+        <section class="detail" id="taskDetail" hidden>
+          <div>
+            <span class="muted">Tempo total</span>
+            <strong id="totalTime">-</strong>
+          </div>
+          <div>
+            <span class="muted">Histórico</span>
+            <ul id="historyList"></ul>
+          </div>
+        </section>
+
+        <div class="actions">
+          <button class="danger" id="deleteBtn" type="button" hidden>Excluir</button>
+          <button class="secondary" id="cancelBtn" type="button">Cancelar</button>
+          <button class="primary" type="submit">Salvar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

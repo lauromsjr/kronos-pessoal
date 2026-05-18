@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "Bash(npx prisma *)",
+      "Bash(node -e \"require\\('./server'\\)\")"
+    ],
+    "additionalDirectories": [
+      "C:\\Claude\\workspace\\olympus-crm\\olympus-hub-web"
+    ]
+  }
+}
