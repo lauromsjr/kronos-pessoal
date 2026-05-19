@@ -21,7 +21,7 @@
         <button class="btn-primary" id="addTaskBtn" type="button">+ Adicionar</button>
       </header>
 
-      <!-- MÉTRICAS RÁPIDAS -->
+      <!-- MÉTRICAS -->
       <section class="metrics" id="metricsBar" aria-label="Resumo">
         <div class="metric-card" data-list="Tarefa" id="metricTarefa">
           <span class="metric-label">Tarefas</span>
@@ -48,10 +48,11 @@
             <span class="ring-pct" id="progressPct">0%</span>
           </div>
           <span class="metric-sub" id="progressSub">concluídas</span>
+          <div class="metric-extra" id="metricExtra"></div>
         </div>
       </section>
 
-      <!-- DISTRIBUIÇÃO POR EMPRESA -->
+      <!-- DISTRIBUIÇÃO -->
       <section class="dist-bar" id="distBar" aria-label="Distribuição por empresa"></section>
 
       <!-- TOOLBAR -->
@@ -66,9 +67,12 @@
           <button class="tab" data-list="Ideia" type="button">
             Ideias <span class="tab-badge" id="tabBadgeIdeia"></span>
           </button>
+          <button class="tab tab-concluidas" data-list="Concluida" type="button">
+            ✓ Concluídas <span class="tab-badge" id="tabBadgeConcluida"></span>
+          </button>
         </nav>
 
-        <div class="filters">
+        <div class="filters" id="mainFilters">
           <label>
             Empresa
             <select id="companyFilter">
@@ -91,8 +95,8 @@
         </div>
       </section>
 
-      <!-- LEGENDA DE URGÊNCIA -->
-      <div class="urgency-legend">
+      <!-- LEGENDA -->
+      <div class="urgency-legend" id="urgencyLegend">
         <span><i class="dot dot-fresh"></i> Recente (&lt;3d)</span>
         <span><i class="dot dot-warn"></i> Atenção (3–7d)</span>
         <span><i class="dot dot-old"></i> Urgente (&gt;7d)</span>
@@ -103,7 +107,7 @@
 
     </main>
 
-    <!-- MODAL -->
+    <!-- MODAL TAREFA -->
     <dialog id="taskModal">
       <form class="modal" id="taskForm" method="dialog">
         <div class="modal-head">
@@ -160,8 +164,21 @@
 
         <label>
           Notas
-          <textarea id="notesInput" rows="4" placeholder="Observações, contexto, links..."></textarea>
+          <textarea id="notesInput" rows="3" placeholder="Observações, contexto, links..."></textarea>
         </label>
+
+        <!-- SUBTAREFAS -->
+        <div class="subtasks-section" id="subtasksSection">
+          <div class="subtasks-header">
+            <span class="detail-label">Subtarefas</span>
+            <span class="subtasks-count" id="subtasksCount"></span>
+          </div>
+          <ul class="subtask-list" id="subtaskList"></ul>
+          <div class="subtask-add">
+            <input id="newSubtaskInput" placeholder="Nova subtarefa..." maxlength="160" />
+            <button class="btn-add-sub" type="button" id="addSubtaskBtn">+</button>
+          </div>
+        </div>
 
         <section class="detail" id="taskDetail" hidden>
           <div class="detail-row">
