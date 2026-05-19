@@ -1,5 +1,5 @@
 // ============================================
-// KRONOS — app.js v2
+// KRONOS — app.js v3 · Tema Claro + Prioridade
 // ============================================
 
 const lists = { Tarefa: 'Tarefas', Backlog: 'Backlog', Ideia: 'Ideias' };
@@ -9,12 +9,12 @@ const state = {
   company: '',
   impact: '',
   tasks: [],
-  allTasks: [], // todas as tasks para métricas
+  allTasks: [],
 };
 
-const board   = document.querySelector('#taskBoard');
-const modal   = document.querySelector('#taskModal');
-const form    = document.querySelector('#taskForm');
+const board = document.querySelector('#taskBoard');
+const modal = document.querySelector('#taskModal');
+const form  = document.querySelector('#taskForm');
 
 const fields = {
   id:      document.querySelector('#taskId'),
@@ -37,39 +37,42 @@ function qs(params) {
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
+  const res = await fetch(path, {
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     ...options,
   });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
     throw new Error(body.error || 'Erro na API');
   }
-  if (response.status === 204) return null;
-  return response.json();
+  if (res.status === 204) return null;
+  return res.json();
 }
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
+function escapeHtml(v) {
+  return String(v)
+    .replaceAll('&', '&amp;').replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;').replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
 }
 
+function parseDate(s) {
+  if (!s) return null;
+  return new Date(String(s).includes('T') ? s : `${s}Z`);
+}
+
 function daysSince(dateStr) {
-  if (!dateStr) return 0;
-  const d = new Date(`${dateStr}`.includes('T') ? dateStr : `${dateStr}Z`);
+  const d = parseDate(dateStr);
+  if (!d) return 0;
   return Math.floor((Date.now() - d.getTime()) / 86400000);
 }
 
 function formatAge(days) {
   if (days < 1)  return 'hoje';
-  if (days === 1) return '1d';
-  if (days < 30) return `${days}d`;
+  if (days === 1) return '1 dia';
+  if (days < 30) return `${days} dias`;
   const m = Math.floor(days / 30);
-  return `${m}m`;
+  return m === 1 ? '1 mês' : `${m} meses`;
 }
 
 function ageClass(days) {
@@ -80,7 +83,8 @@ function ageClass(days) {
 
 function formatElapsed(task) {
   if (task.status !== 'Em andamento' || !task.started_at) return '';
-  const started = new Date(`${task.started_at}`.includes('T') ? task.started_at : `${task.started_at}Z`);
+  const started = parseDate(task.started_at);
+  if (!started) return '';
   const minutes = Math.max(0, Math.floor((Date.now() - started.getTime()) / 60000));
   if (minutes < 60) return `${minutes}min`;
   const h = Math.floor(minutes / 60);
@@ -101,6 +105,21 @@ function impactChipClass(impact) {
 }
 
 // ============================================
+// ORDENAÇÃO POR IMPACTO
+// Alto primeiro → Médio → Baixo
+// Dentro do mesmo impacto: mais antigas primeiro (mais urgentes)
+// ============================================
+
+function sortByPriority(tasks) {
+  const order = { Alto: 0, Médio: 1, Baixo: 2 };
+  return [...tasks].sort((a, b) => {
+    const diff = (order[a.impact] ?? 3) - (order[b.impact] ?? 3);
+    if (diff !== 0) return diff;
+    return new Date(a.created_at) - new Date(b.created_at);
+  });
+}
+
+// ============================================
 // MÉTRICAS
 // ============================================
 
@@ -112,7 +131,6 @@ async function loadAllTasks() {
 function updateMetrics() {
   const all = state.allTasks;
 
-  // Contadores por lista
   const counts = { Tarefa: 0, Backlog: 0, Ideia: 0 };
   all.forEach(t => { if (counts[t.list_type] !== undefined) counts[t.list_type]++; });
 
@@ -120,37 +138,30 @@ function updateMetrics() {
   document.querySelector('#countBacklog').textContent = counts.Backlog;
   document.querySelector('#countIdeia').textContent   = counts.Ideia;
 
-  // Tab badges
   document.querySelector('#tabBadgeTarefa').textContent  = counts.Tarefa;
   document.querySelector('#tabBadgeBacklog').textContent = counts.Backlog;
   document.querySelector('#tabBadgeIdeia').textContent   = counts.Ideia;
 
-  // Sub-labels
   const emAndamento = all.filter(t => t.list_type === 'Tarefa' && t.status === 'Em andamento').length;
   document.querySelector('#subTarefa').textContent = emAndamento > 0
     ? `${emAndamento} em andamento`
     : 'nenhuma em andamento';
 
-  // Progresso (tarefas concluídas / total tarefas)
-  const tarefas   = all.filter(t => t.list_type === 'Tarefa');
+  // Progresso
+  const tarefas    = all.filter(t => t.list_type === 'Tarefa');
   const concluidas = tarefas.filter(t => t.status === 'Concluída').length;
   const pct = tarefas.length > 0 ? Math.round((concluidas / tarefas.length) * 100) : 0;
-  const circumference = 163.4;
-  const offset = circumference - (pct / 100) * circumference;
+  const offset = 163.4 - (pct / 100) * 163.4;
   document.querySelector('#progressRing').style.strokeDashoffset = offset;
   document.querySelector('#progressPct').textContent = `${pct}%`;
   document.querySelector('#progressSub').textContent = `${concluidas}/${tarefas.length} tarefas`;
 
-  // Distribuição por empresa
+  // Distribuição
   const dist = {};
-  all.forEach(t => {
-    if (!dist[t.company]) dist[t.company] = 0;
-    dist[t.company]++;
-  });
+  all.forEach(t => { dist[t.company] = (dist[t.company] || 0) + 1; });
 
-  const colors = { IbogaLiv: '#22C55E', Olympus: '#D4AF37', PlugAI: '#818CF8', Pessoal: '#64748B' };
-  const distBar = document.querySelector('#distBar');
-  distBar.innerHTML = Object.entries(dist)
+  const colors = { IbogaLiv: '#16A34A', Olympus: '#B8960C', PlugAI: '#6366F1', Pessoal: '#64748B' };
+  document.querySelector('#distBar').innerHTML = Object.entries(dist)
     .sort((a, b) => b[1] - a[1])
     .map(([company, count]) => `
       <div class="dist-item">
@@ -160,7 +171,7 @@ function updateMetrics() {
       </div>
     `).join('');
 
-  // Metric card active state
+  // Active state nos metric cards
   document.querySelectorAll('.metric-card[data-list]').forEach(card => {
     card.classList.toggle('active', card.dataset.list === state.list);
   });
@@ -170,16 +181,6 @@ function updateMetrics() {
 // RENDER
 // ============================================
 
-function sortByImpact(tasks) {
-  const order = { Alto: 0, Médio: 1, Baixo: 2 };
-  return [...tasks].sort((a, b) => {
-    const diff = (order[a.impact] ?? 3) - (order[b.impact] ?? 3);
-    if (diff !== 0) return diff;
-    // dentro do mesmo impacto: mais antigas primeiro
-    return new Date(a.created_at) - new Date(b.created_at);
-  });
-}
-
 function render() {
   board.innerHTML = '';
 
@@ -188,26 +189,33 @@ function render() {
     return;
   }
 
-  const sorted = sortByImpact(state.tasks);
+  const sorted = sortByPriority(state.tasks);
 
-  for (const task of sorted) {
-    const days = daysSince(task.created_at);
-    const cls  = ageClass(days);
-    const age  = formatAge(days);
+  sorted.forEach((task, index) => {
+    const days    = daysSince(task.created_at);
+    const cls     = ageClass(days);
+    const age     = formatAge(days);
     const elapsed = formatElapsed(task);
     const impactCls = impactChipClass(task.impact);
+    const num     = index + 1;
+
+    // Tooltip do tempo
+    const ageTitle = days < 1
+      ? 'Criada hoje'
+      : `No sistema há ${age}`;
 
     const article = document.createElement('article');
     article.className = 'task';
     article.dataset.impact = task.impact;
 
     article.innerHTML = `
+      <span class="priority-num">${num}</span>
       <div class="task-meta">
         <span class="badge ${task.company}">${task.company}</span>
         <span class="chip ${impactCls}">${task.impact}</span>
         <span class="chip">${task.status}</span>
-        <span class="task-age ${cls}" title="${days} dias no sistema">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <span class="task-age ${cls}" title="${ageTitle}">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0">
             <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
           </svg>
           ${age}
@@ -220,12 +228,12 @@ function render() {
             .map(s => `<option ${s === task.status ? 'selected' : ''}>${s}</option>`)
             .join('')}
         </select>
-        <button type="button" data-open-id="${task.id}" style="border:1px solid var(--line);border-radius:8px;padding:8px 14px;background:transparent;color:var(--muted);font-size:0.8rem;font-weight:700;">Editar</button>
+        <button class="btn-edit" type="button" data-open-id="${task.id}">Editar</button>
         ${elapsed ? `<span class="elapsed">⏱ ${elapsed}</span>` : ''}
       </div>
     `;
     board.appendChild(article);
-  }
+  });
 }
 
 // ============================================
@@ -236,8 +244,6 @@ async function loadTasks() {
   const query = qs({ list: state.list, company: state.company, impact: state.impact });
   const result = await api(`/api/tasks?${query}`);
   state.tasks = result.data;
-
-  // Recarrega todas para métricas
   await loadAllTasks();
   updateMetrics();
   render();
@@ -255,9 +261,9 @@ function resetForm() {
   fields.list.value    = state.list;
   fields.status.value  = 'A fazer';
   fields.notes.value   = '';
-  document.querySelector('#modalTitle').textContent   = 'Nova tarefa';
-  document.querySelector('#taskDetail').hidden        = true;
-  document.querySelector('#deleteBtn').hidden         = true;
+  document.querySelector('#modalTitle').textContent = 'Nova tarefa';
+  document.querySelector('#taskDetail').hidden      = true;
+  document.querySelector('#deleteBtn').hidden       = true;
 }
 
 async function openTask(id) {
@@ -279,7 +285,11 @@ async function openTask(id) {
 
   document.querySelector('#historyList').innerHTML = task.history.length
     ? task.history
-        .map(item => `<li>${item.from_status || 'Criada'} → ${item.to_status} · ${new Date(`${item.changed_at}`.includes('T') ? item.changed_at : `${item.changed_at}Z`).toLocaleString('pt-BR')}</li>`)
+        .map(item => {
+          const d = parseDate(item.changed_at);
+          const dateStr = d ? d.toLocaleString('pt-BR') : item.changed_at;
+          return `<li>${item.from_status || 'Criada'} → ${item.to_status} · ${dateStr}</li>`;
+        })
         .join('')
     : '<li>Sem mudanças registradas.</li>';
 
@@ -288,7 +298,6 @@ async function openTask(id) {
 
 async function saveTask(event) {
   event.preventDefault();
-
   const payload = {
     title:     fields.title.value,
     company:   fields.company.value,
@@ -329,7 +338,6 @@ document.querySelector('#deleteBtn').addEventListener('click', async () => {
 
 form.addEventListener('submit', saveTask);
 
-// Tabs
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', async () => {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -339,7 +347,6 @@ document.querySelectorAll('.tab').forEach(tab => {
   });
 });
 
-// Metric cards clicáveis como tabs
 document.querySelectorAll('.metric-card[data-list]').forEach(card => {
   card.addEventListener('click', async () => {
     const list = card.dataset.list;
@@ -377,8 +384,5 @@ board.addEventListener('click', async (e) => {
   await openTask(id);
 });
 
-// Atualiza elapsed a cada minuto
 setInterval(render, 60000);
-
-// Init
 loadTasks();
