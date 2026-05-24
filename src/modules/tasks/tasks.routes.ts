@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { NextFunction, Request, Response, Router } from 'express';
 import { z } from 'zod';
 import { getDb } from '../../database/sqlite';
 
@@ -9,12 +9,23 @@ const impacts    = ['Alto', 'Médio', 'Baixo'] as const;
 const listTypes  = ['Tarefa', 'Backlog', 'Ideia'] as const;
 const statuses   = ['A fazer', 'Em andamento', 'Concluída', 'Pausada'] as const;
 
+const nullableCompany = z.preprocess(
+  (value) => value === '' ? null : value,
+  z.enum(companies).nullable().optional()
+);
+
+const nullableDueDate = z.preprocess(
+  (value) => value === '' ? null : value,
+  z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional()
+);
+
 const taskInput = z.object({
   title:     z.string().trim().min(1),
-  company:   z.enum(companies).nullable().optional(),
+  company:   nullableCompany,
   impact:    z.enum(impacts).nullable().optional(),
   list_type: z.enum(listTypes).nullable().optional(),
   status:    z.enum(statuses).nullable().optional(),
+  due_date:  nullableDueDate,
   notes:     z.string().nullable().optional(),
 });
 
@@ -31,7 +42,7 @@ const subtaskInput = z.object({
 
 // ── Init subtasks table ──────────────────────────────────────────────────────
 
-async function ensureSubtasksTable() {
+export async function ensureSubtasksTable() {
   const db = await getDb();
   await db.exec(`
     CREATE TABLE IF NOT EXISTS subtasks (
@@ -47,20 +58,37 @@ async function ensureSubtasksTable() {
   `);
 }
 
-ensureSubtasksTable().catch(console.error);
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function normalizeTask(input: z.infer<typeof taskInput>) {
   return {
     title:     input.title,
-    company:   input.company   || 'PlugAI',
+    company:   input.company ?? null,
     impact:    input.impact    || 'Médio',
     list_type: input.list_type || 'Tarefa',
     status:    input.status    || 'A fazer',
+    due_date:  input.due_date ?? null,
     notes:     input.notes     || '',
   };
 }
+
+function requireApiKey(req: Request, res: Response, next: NextFunction) {
+  const expected = process.env.KRONOS_API_KEY;
+  if (!expected) return next();
+
+  if (req.header('X-Api-Key') !== expected) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  return next();
+}
+
+function csvEscape(value: unknown) {
+  if (value === null || value === undefined) return '';
+  return `"${String(value).replaceAll('"', '""').replace(/\r?\n/g, '\n')}"`;
+}
+
+router.use(['/tasks', '/subtasks'], requireApiKey);
 
 async function applyStatusChange(taskId: number, nextStatus: string) {
   const db = await getDb();
@@ -115,16 +143,25 @@ router.get('/tasks', async (req, res, next) => {
     const db = await getDb();
     const filterMap = { list: 'list_type', company: 'company', impact: 'impact', status: 'status' } as const;
     const where: string[] = [];
-    const values: string[] = [];
+    const values: unknown[] = [];
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const isCompletedList = req.query.list === 'Concluida';
 
     // Aba "Concluídas" — retorna todas concluídas independente de list_type
-    if (req.query.list === 'Concluida') {
+    if (isCompletedList) {
       where.push("status = 'Concluída'");
+      for (const [queryKey, column] of Object.entries(filterMap)) {
+        if (queryKey === 'list' || queryKey === 'status') continue;
+        const value = req.query[queryKey];
+        if (typeof value === 'string' && value.trim()) {
+          where.push(`${column} = ?`);
+          values.push(value);
+        }
+      }
     } else {
       // Nas outras abas, excluir concluídas
       where.push("status != 'Concluída'");
       for (const [queryKey, column] of Object.entries(filterMap)) {
-        if (queryKey === 'status') continue;
         const value = req.query[queryKey];
         if (typeof value === 'string' && value.trim()) {
           where.push(`${column} = ?`);
@@ -133,14 +170,41 @@ router.get('/tasks', async (req, res, next) => {
       }
     }
 
-    const rows = await db.all(
-      `SELECT * FROM tasks WHERE ${where.join(' AND ')}
-       ORDER BY
-         CASE status WHEN 'Em andamento' THEN 0 WHEN 'A fazer' THEN 1 WHEN 'Pausada' THEN 2 ELSE 3 END,
-         CASE impact WHEN 'Alto' THEN 0 WHEN 'Médio' THEN 1 ELSE 2 END,
-         created_at ASC`,
-      values
-    );
+    if (search) {
+      where.push('title LIKE ?');
+      values.push(`%${search}%`);
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const page = Math.max(1, Number(req.query.page || 1));
+    const rawLimit = Number(req.query.limit || 20);
+    const limit = Math.min(100, Math.max(1, Number.isFinite(rawLimit) ? rawLimit : 20));
+    const offset = (page - 1) * limit;
+
+    let rows: any[];
+    let total = 0;
+
+    if (isCompletedList) {
+      const totalRow = await db.get<{ total: number }>(`SELECT COUNT(*) as total FROM tasks ${whereSql}`, values);
+      total = totalRow?.total || 0;
+      rows = await db.all(
+        `SELECT * FROM tasks ${whereSql}
+         ORDER BY completed_at DESC, created_at DESC
+         LIMIT ? OFFSET ?`,
+        [...values, limit, offset]
+      );
+    } else {
+      rows = await db.all(
+        `SELECT * FROM tasks ${whereSql}
+         ORDER BY
+           CASE WHEN due_date IS NULL THEN 1 ELSE 0 END,
+           due_date ASC,
+           CASE status WHEN 'Em andamento' THEN 0 WHEN 'A fazer' THEN 1 WHEN 'Pausada' THEN 2 ELSE 3 END,
+           CASE impact WHEN 'Alto' THEN 0 WHEN 'Médio' THEN 1 ELSE 2 END,
+           created_at ASC`,
+        values
+      );
+    }
 
     // Attach subtask counts
     const ids = rows.map((r: any) => r.id);
@@ -151,18 +215,92 @@ router.get('/tasks', async (req, res, next) => {
       subtasks_done:  counts[r.id]?.done  || 0,
     }));
 
+    if (isCompletedList) {
+      return res.json({
+        data,
+        pagination: {
+          page,
+          limit,
+          total,
+          has_more: offset + data.length < total,
+        },
+      });
+    }
+
     res.json({ data });
   } catch (err) { next(err); }
 });
 
 // ── GET /tasks/export ────────────────────────────────────────────────────────
 
-router.get('/tasks/export', async (_req, res, next) => {
+router.get('/tasks/stats', async (_req, res, next) => {
+  try {
+    const db = await getDb();
+    const byStatusRows = await db.all<{ status: string; total: number }[]>(
+      'SELECT status, COUNT(*) as total FROM tasks GROUP BY status'
+    );
+    const byCompanyRows = await db.all<{ company_name: string; total: number }[]>(
+      `SELECT COALESCE(NULLIF(company, ''), 'Sem empresa') as company_name, COUNT(*) as total
+       FROM tasks GROUP BY company_name`
+    );
+
+    const by_status: Record<string, number> = {
+      'A fazer': 0,
+      'Em andamento': 0,
+      'Concluída': 0,
+      'Pausada': 0,
+    };
+    const by_company: Record<string, number> = {
+      IbogaLiv: 0,
+      Olympus: 0,
+      PlugAI: 0,
+      Pessoal: 0,
+      'Sem empresa': 0,
+    };
+
+    byStatusRows.forEach((row) => {
+      if (row.status in by_status) by_status[row.status] = row.total;
+    });
+    byCompanyRows.forEach((row) => {
+      if (row.company_name in by_company) by_company[row.company_name] = row.total;
+    });
+
+    res.json({ by_status, by_company });
+  } catch (err) { next(err); }
+});
+
+router.get('/tasks/export', async (req, res, next) => {
   try {
     const db = await getDb();
     const tasks   = await db.all('SELECT * FROM tasks ORDER BY created_at DESC');
     const history = await db.all('SELECT * FROM task_status_history ORDER BY changed_at DESC');
     const subtasks = await db.all('SELECT * FROM subtasks ORDER BY task_id, position');
+
+    if (req.query.format === 'csv') {
+      const columns = [
+        'id',
+        'title',
+        'company',
+        'impact',
+        'list_type',
+        'status',
+        'due_date',
+        'created_at',
+        'started_at',
+        'completed_at',
+        'duration_min',
+        'notes',
+      ];
+      const csv = [
+        columns.join(','),
+        ...tasks.map((task: Record<string, unknown>) => columns.map((column) => csvEscape(task[column])).join(',')),
+      ].join('\n');
+
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="kronos_tasks.csv"');
+      return res.send(csv);
+    }
+
     res.json({ exported_at: new Date().toISOString(), source: 'kronos-tasks-v1', tasks, history, subtasks });
   } catch (err) { next(err); }
 });
@@ -191,8 +329,8 @@ router.post('/tasks', async (req, res, next) => {
     const db = await getDb();
 
     const result = await db.run(
-      `INSERT INTO tasks (title, company, impact, list_type, status, notes) VALUES (?, ?, ?, ?, ?, ?)`,
-      task.title, task.company, task.impact, task.list_type, task.status, task.notes
+      `INSERT INTO tasks (title, company, impact, list_type, status, due_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      task.title, task.company, task.impact, task.list_type, task.status, task.due_date, task.notes
     );
 
     await db.run(
@@ -215,12 +353,15 @@ router.put('/tasks/:id', async (req, res, next) => {
     const current = await db.get('SELECT * FROM tasks WHERE id = ?', id);
     if (!current) return res.status(404).json({ error: 'Task not found' });
 
-    const fields = ['title', 'company', 'impact', 'list_type', 'notes'] as const;
+    const fields = ['title', 'company', 'impact', 'list_type', 'due_date', 'notes'] as const;
     const updates: string[] = [];
     const values: unknown[]  = [];
 
     for (const field of fields) {
-      if (field in parsed) { updates.push(`${field} = ?`); values.push(parsed[field] ?? ''); }
+      if (field in parsed) {
+        updates.push(`${field} = ?`);
+        values.push(field === 'company' || field === 'due_date' ? parsed[field] ?? null : parsed[field] ?? '');
+      }
     }
 
     if (updates.length) {

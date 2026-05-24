@@ -207,6 +207,14 @@ h2, h3 { font-family: var(--font-title); }
   flex-wrap: wrap;
 }
 
+.status-summary {
+  margin-bottom: 10px;
+  color: var(--navy);
+  font-family: var(--font-title);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
 .dist-item {
   display: flex;
   align-items: center;
@@ -287,7 +295,8 @@ h2, h3 { font-family: var(--font-title); }
 
 .filters {
   display: grid;
-  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  grid-template-columns: minmax(180px, 1.4fr) repeat(2, minmax(120px, 1fr)) auto;
+  align-items: end;
   gap: 10px;
 }
 
@@ -465,6 +474,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold); }
 .badge.Olympus  { background: #FEF9C3; color: #92400E; }
 .badge.PlugAI   { background: #EEF2FF; color: #4338CA; }
 .badge.Pessoal  { background: #F1F5F9; color: #475569; }
+.badge.SemEmpresa { background: #E2E8F0; color: #475569; }
 
 .chip {
   border: 1px solid var(--line);
@@ -481,6 +491,26 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold); }
 .chip-impact-baixo { border-color: rgba(22,163,74,0.3);  color: #16A34A; background: #F0FDF4; }
 
 .elapsed { color: var(--gold); font-size: 0.7rem; font-weight: 700; }
+
+.due-date {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.due-date.today {
+  background: #FFFBEB;
+  color: var(--warn);
+}
+
+.due-date.overdue {
+  background: #FEF2F2;
+  color: var(--old);
+}
 
 .task select {
   flex: 1;
@@ -519,6 +549,12 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold); }
   border-bottom: 1px solid var(--line);
   font-family: var(--font-title);
   font-size: 0.88rem;
+}
+
+.load-more-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
 }
 
 /* ── BOTÕES ── */
