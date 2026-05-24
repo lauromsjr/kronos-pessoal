@@ -40,6 +40,7 @@ COPY --from=builder /app/node_modules ./node_modules
 # Copiar código compilado do stage anterior
 COPY --from=builder /app/dist ./dist
 COPY src/public ./dist/public
+COPY scripts ./scripts
 
 # Copiar arquivos de contexto (memória estática)
 COPY src/contexts ./dist/contexts
