@@ -21,6 +21,7 @@ const state = {
   subtasks:  {}, // taskId → []
   completedPage: 1,
   completedHasMore: false,
+  viewMode: localStorage.getItem('KRONOS_VIEW_MODE') || 'list',
 };
 
 const board = document.querySelector('#taskBoard');
@@ -140,6 +141,7 @@ async function logout() {
 }
 
 async function init() {
+  updateToggleButtons();
   if (await checkAuth()) {
     showApp();
     await loadTasks();
@@ -560,8 +562,9 @@ function renderTaskCard(task, index, isConcluida) {
   `;
 }
 
-function render() {
+function renderList() {
   board.innerHTML = '';
+  board.classList.remove('kanban-mode');
   const isConcluida = state.list === 'Concluida';
 
   if (!state.tasks.length) {
@@ -574,6 +577,202 @@ function render() {
     : sortByPriority(state.tasks);
 
   board.innerHTML = sorted.map((task, i) => renderTaskCard(task, i, isConcluida)).join('');
+}
+
+function sortKanbanTasks(tasks) {
+  const impactOrder = { Alto: 0, 'Médio': 1, Baixo: 2 };
+  return [...tasks].sort((a, b) => {
+    const hasA = a.due_date ? 1 : 0;
+    const hasB = b.due_date ? 1 : 0;
+    if (hasA !== hasB) return hasB - hasA;
+    if (a.due_date && b.due_date) {
+      const dueDiff = a.due_date.localeCompare(b.due_date);
+      if (dueDiff !== 0) return dueDiff;
+    }
+    const diff = (impactOrder[a.impact] ?? 3) - (impactOrder[b.impact] ?? 3);
+    if (diff !== 0) return diff;
+    return new Date(a.created_at) - new Date(b.created_at);
+  });
+}
+
+function renderKanbanCard(task, index) {
+  const days    = daysSince(task.created_at);
+  const cls     = ageClass(days);
+  const age     = formatAge(days);
+  const elapsed = formatElapsed(task);
+  const impactCls = impactChipClass(task.impact);
+  const ageTitle = days < 1 ? 'Criada hoje' : `No sistema há ${age}`;
+  const company = companyLabel(task.company);
+  const badgeClass = companyClass(task.company);
+  const dueHtml = task.due_date ? `<span class="due-date ${dueDateClass(task.due_date)}">${dueDateText(task.due_date)}</span>` : '';
+
+  const total = task.subtasks_total || 0;
+  const done  = task.subtasks_done  || 0;
+  const subPct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const isComplete = total > 0 && done === total;
+
+  const progressHtml = total > 0 ? `
+    <div class="task-progress">
+      <div class="task-progress-header">
+        <span>Subtarefas</span>
+        <span>${done}/${total}</span>
+      </div>
+      <div class="task-progress-bar">
+        <div class="task-progress-fill ${isComplete ? 'complete' : ''}" style="width:${subPct}%"></div>
+      </div>
+    </div>
+  ` : '';
+
+  return `
+    <article class="task kanban-card" data-impact="${task.impact}" draggable="true" data-task-id="${task.id}">
+      <span class="priority-num">${index + 1}</span>
+      <div class="task-meta">
+        <span class="badge ${badgeClass}">${company}</span>
+        <span class="chip ${impactCls}">${task.impact}</span>
+        <span class="task-age ${cls}" title="${ageTitle}">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          ${age}
+        </span>
+      </div>
+      <h3>${escapeHtml(task.title)}</h3>
+      ${dueHtml}
+      ${progressHtml}
+      <div class="task-footer">
+        <select aria-label="Status" data-status-id="${task.id}">
+          ${['A fazer','Em andamento','Concluída','Pausada']
+            .map(s => `<option ${s === task.status ? 'selected' : ''}>${s}</option>`).join('')}
+        </select>
+        <button class="btn-edit" type="button" data-open-id="${task.id}">Abrir</button>
+        ${elapsed ? `<span class="elapsed">⏱ ${elapsed}</span>` : ''}
+      </div>
+    </article>
+  `;
+}
+
+function renderKanban() {
+  board.innerHTML = '';
+  board.classList.add('kanban-mode');
+
+  const columns = ['A fazer', 'Em andamento', 'Pausada', 'Concluída'];
+  const grouped = {
+    'A fazer': [],
+    'Em andamento': [],
+    'Pausada': [],
+    'Concluída': []
+  };
+
+  state.tasks.forEach(task => {
+    if (grouped[task.status] !== undefined) {
+      grouped[task.status].push(task);
+    }
+  });
+
+  const columnsHtml = columns.map(status => {
+    const tasksInCol = sortKanbanTasks(grouped[status]);
+    const count = tasksInCol.length;
+
+    const cardsHtml = tasksInCol.map((task, i) => renderKanbanCard(task, i)).join('');
+
+    return `
+      <div class="kanban-column" data-status="${status}">
+        <div class="kanban-column-header">
+          <h3>${status}</h3>
+          <span class="kanban-count">${count}</span>
+        </div>
+        <div class="kanban-list" data-status="${status}">
+          ${cardsHtml || '<p class="empty" style="padding: 24px 0;">Nenhuma tarefa</p>'}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  board.innerHTML = `<div class="kanban-board">${columnsHtml}</div>`;
+
+  setupDragAndDrop();
+}
+
+function setupDragAndDrop() {
+  const cards = board.querySelectorAll('.kanban-card');
+  const lists = board.querySelectorAll('.kanban-list');
+
+  cards.forEach(card => {
+    card.addEventListener('dragstart', (e) => {
+      card.classList.add('dragging');
+      e.dataTransfer.setData('text/plain', card.dataset.taskId);
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+    });
+  });
+
+  lists.forEach(list => {
+    list.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      list.classList.add('drag-over');
+    });
+
+    list.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+    });
+
+    list.addEventListener('dragleave', () => {
+      list.classList.remove('drag-over');
+    });
+
+    list.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      list.classList.remove('drag-over');
+      const taskId = e.dataTransfer.getData('text/plain');
+      const nextStatus = list.dataset.status;
+      if (taskId && nextStatus) {
+        await updateTaskStatusFromKanban(Number(taskId), nextStatus);
+      }
+    });
+  });
+}
+
+async function updateTaskStatusFromKanban(taskId, nextStatus) {
+  try {
+    await api(`/api/tasks/${taskId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: nextStatus }),
+    });
+    await loadTasks();
+  } catch (err) {
+    console.error('Erro ao atualizar status do card:', err);
+    alert('Não foi possível alterar o status da tarefa. Recarregando dados...');
+    await loadTasks();
+  }
+}
+
+function setViewMode(mode) {
+  state.viewMode = mode;
+  localStorage.setItem('KRONOS_VIEW_MODE', mode);
+  updateToggleButtons();
+  render();
+}
+
+function updateToggleButtons() {
+  const container = document.querySelector('#viewModeToggle');
+  if (container) {
+    container.querySelectorAll('.toggle-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.mode === state.viewMode);
+    });
+  }
+}
+
+function render() {
+  const isConcluida = state.list === 'Concluida';
+  if (!isConcluida && state.viewMode === 'kanban') {
+    renderKanban();
+  } else {
+    renderList();
+  }
 }
 
 // ============================================
@@ -594,11 +793,20 @@ async function loadTasks() {
   await loadStats();
   await loadToday();
   updateMetrics();
+
+  const isConcluida = state.list === 'Concluida';
+  const toggleEl = document.querySelector('#viewModeToggle');
+  if (toggleEl) {
+    toggleEl.style.display = isConcluida ? 'none' : '';
+    if (!isConcluida) {
+      updateToggleButtons();
+    }
+  }
+
   render();
   document.querySelector('#loadMoreBtn').hidden = !(state.list === 'Concluida' && state.completedHasMore);
 
   // Oculta legenda e filtros na aba concluídas
-  const isConcluida = state.list === 'Concluida';
   document.querySelector('#urgencyLegend').style.display = isConcluida ? 'none' : '';
   document.querySelector('#addTaskBtn').hidden = state.activeView !== 'execution' || isConcluida;
 }
@@ -861,6 +1069,14 @@ document.querySelectorAll('.app-nav-btn').forEach(btn => {
 document.querySelector('#todayToggleBtn').addEventListener('click', () => {
   setTodayCollapsed(!state.todayCollapsed);
 });
+
+const toggleEl = document.querySelector('#viewModeToggle');
+if (toggleEl) {
+  toggleEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.toggle-btn');
+    if (btn) setViewMode(btn.dataset.mode);
+  });
+}
 
 loginForm.addEventListener('submit', submitLogin);
 document.querySelector('#logoutBtn').addEventListener('click', logout);
