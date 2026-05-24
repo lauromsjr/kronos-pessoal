@@ -15,6 +15,8 @@ const state = {
   stats:     null,
   today:      null,
   todayCollapsed: localStorage.getItem('Kronos_TODAY_COLLAPSED') === 'true',
+  activeView: 'execution',
+  backupsLoaded: false,
   backups:   [],
   subtasks:  {}, // taskId → []
   completedPage: 1,
@@ -99,6 +101,7 @@ function showApp() {
   appView.hidden = false;
   loginError.hidden = true;
   loginError.textContent = '';
+  switchView(state.activeView);
 }
 
 async function checkAuth() {
@@ -144,6 +147,21 @@ async function init() {
   }
 
   showLogin();
+}
+
+async function switchView(view) {
+  state.activeView = view;
+  document.querySelector('#executionView').hidden = view !== 'execution';
+  document.querySelector('#settingsView').hidden = view !== 'settings';
+  document.querySelector('#addTaskBtn').hidden = view !== 'execution' || state.list === 'Concluida';
+
+  document.querySelectorAll('.app-nav-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === view);
+  });
+
+  if (view === 'settings' && !state.backupsLoaded) {
+    await loadBackups();
+  }
 }
 
 function escapeHtml(v) {
@@ -378,6 +396,7 @@ function renderBackups() {
 async function loadBackups() {
   const result = await api('/api/backups');
   state.backups = result.data || [];
+  state.backupsLoaded = true;
   renderBackups();
   setBackupMessage(`${state.backups.length} backup(s) disponível(is).`);
 }
@@ -574,7 +593,6 @@ async function loadTasks() {
   await loadAllTasks();
   await loadStats();
   await loadToday();
-  await loadBackups();
   updateMetrics();
   render();
   document.querySelector('#loadMoreBtn').hidden = !(state.list === 'Concluida' && state.completedHasMore);
@@ -582,7 +600,7 @@ async function loadTasks() {
   // Oculta legenda e filtros na aba concluídas
   const isConcluida = state.list === 'Concluida';
   document.querySelector('#urgencyLegend').style.display = isConcluida ? 'none' : '';
-  document.querySelector('#addTaskBtn').style.display    = isConcluida ? 'none' : '';
+  document.querySelector('#addTaskBtn').hidden = state.activeView !== 'execution' || isConcluida;
 }
 
 async function loadMoreCompleted() {
@@ -832,6 +850,12 @@ document.querySelector('#refreshBackupsBtn').addEventListener('click', async () 
 
 document.querySelector('#runBackupBtn').addEventListener('click', async () => {
   await runManualBackup();
+});
+
+document.querySelectorAll('.app-nav-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    await switchView(btn.dataset.view);
+  });
 });
 
 document.querySelector('#todayToggleBtn').addEventListener('click', () => {
