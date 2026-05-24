@@ -13,6 +13,7 @@ const state = {
   tasks:     [],
   allTasks:  [],
   stats:     null,
+  backups:   [],
   subtasks:  {}, // taskId → []
   completedPage: 1,
   completedHasMore: false,
@@ -198,6 +199,19 @@ function formatDate(dateStr) {
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+function formatDateTime(dateStr) {
+  const d = parseDate(dateStr);
+  if (!d) return '';
+  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes)) return '-';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function companyLabel(company) {
   return company || 'Sem empresa';
 }
@@ -271,6 +285,52 @@ async function loadStats() {
         <span class="dist-num">${count}</span>
       </div>
     `).join('');
+}
+
+function setBackupMessage(message, type = '') {
+  const el = document.querySelector('#backupMessage');
+  el.textContent = message;
+  el.className = `backup-message ${type}`.trim();
+}
+
+function renderBackups() {
+  const list = document.querySelector('#backupList');
+  if (!state.backups.length) {
+    list.innerHTML = '<p class="backup-message">Nenhum backup encontrado.</p>';
+    return;
+  }
+
+  list.innerHTML = state.backups.map((backup) => `
+    <div class="backup-item">
+      <span class="backup-file">${escapeHtml(backup.filename)}</span>
+      <span class="backup-meta">${formatBytes(backup.size_bytes)}${backup.created_at ? ` · ${formatDateTime(backup.created_at)}` : ''}</span>
+      <a class="backup-download" href="/api/backups/${encodeURIComponent(backup.filename)}/download" target="_blank" rel="noopener">Baixar</a>
+    </div>
+  `).join('');
+}
+
+async function loadBackups() {
+  const result = await api('/api/backups');
+  state.backups = result.data || [];
+  renderBackups();
+  setBackupMessage(`${state.backups.length} backup(s) disponível(is).`);
+}
+
+async function runManualBackup() {
+  const button = document.querySelector('#runBackupBtn');
+  button.disabled = true;
+  setBackupMessage('Gerando backup agora...');
+
+  try {
+    const result = await api('/api/backups/run', { method: 'POST' });
+    await loadBackups();
+    setBackupMessage(`Backup criado: ${result.backup.filename}`, 'success');
+  } catch (err) {
+    setBackupMessage('Não foi possível gerar o backup.', 'error');
+    throw err;
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function updateMetrics() {
@@ -447,6 +507,7 @@ async function loadTasks() {
   state.completedHasMore = Boolean(result.pagination?.has_more);
   await loadAllTasks();
   await loadStats();
+  await loadBackups();
   updateMetrics();
   render();
   document.querySelector('#loadMoreBtn').hidden = !(state.list === 'Concluida' && state.completedHasMore);
@@ -696,6 +757,14 @@ document.querySelector('#exportCsvBtn').addEventListener('click', async () => {
 
 document.querySelector('#loadMoreBtn').addEventListener('click', async () => {
   await loadMoreCompleted();
+});
+
+document.querySelector('#refreshBackupsBtn').addEventListener('click', async () => {
+  await loadBackups();
+});
+
+document.querySelector('#runBackupBtn').addEventListener('click', async () => {
+  await runManualBackup();
 });
 
 loginForm.addEventListener('submit', submitLogin);

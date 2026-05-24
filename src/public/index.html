@@ -78,6 +78,21 @@
       </section>
       <section class="dist-bar" id="distBar" aria-label="Distribuição por empresa"></section>
 
+      <!-- BACKUPS -->
+      <section class="backup-panel" aria-label="Backups SQLite">
+        <div class="backup-head">
+          <div>
+            <span class="metric-label">Backups SQLite</span>
+            <p id="backupMessage" class="backup-message">Carregando backups...</p>
+          </div>
+          <div class="backup-actions">
+            <button class="btn-secondary" id="refreshBackupsBtn" type="button">Atualizar backups</button>
+            <button class="btn-secondary" id="runBackupBtn" type="button">Backup agora</button>
+          </div>
+        </div>
+        <div class="backup-list" id="backupList"></div>
+      </section>
+
       <!-- TOOLBAR -->
       <section class="toolbar" aria-label="Filtros">
         <nav class="tabs" aria-label="Listas">

@@ -201,6 +201,12 @@ KRONOS_SESSION_DAYS=30
 
 O login cria um cookie `httpOnly` assinado por HMAC. A variável `KRONOS_API_KEY` continua opcional para chamadas técnicas via header `X-Api-Key`, como curl, n8n e automações.
 
+### Backups SQLite
+
+O Kronos executa backup diário do SQLite às 03h e também permite backup manual pela interface. Os arquivos ficam na mesma pasta do `SQLITE_PATH`, normalmente `/app/data`, com nomes como `kronos_backup_2026-05-24.sqlite`.
+
+São mantidos apenas os 7 backups mais recentes. A interface permite listar, gerar e baixar backups; restauração não é feita pelo app.
+
 **Salvar e iniciar container.**
 
 ---

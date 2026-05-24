@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { initTaskSchema } from './database/sqlite';
 import { authRouter } from './modules/auth/auth.routes';
+import { backupRouter } from './modules/backup/backup.routes';
 import { ensureSubtasksTable, tasksRouter } from './modules/tasks/tasks.routes';
 import { startDailySqliteBackup } from './modules/cron/backup';
 
@@ -24,6 +25,7 @@ async function bootstrap() {
   });
 
   app.use('/api', authRouter);
+  app.use('/api', backupRouter);
   app.use('/api', tasksRouter);
 
   app.get('*', (_req, res) => {
