@@ -18,6 +18,8 @@ const state = {
   activeView: 'execution',
   backupsLoaded: false,
   backups:   [],
+  calendarStatus: null,
+  calendarEvents: { today: [], tomorrow: [] },
   subtasks:  {}, // taskId → []
   completedPage: 1,
   completedHasMore: false,
@@ -166,6 +168,10 @@ async function switchView(view) {
   if (view === 'settings' && !state.backupsLoaded) {
     await loadBackups();
   }
+
+  if (view === 'settings') {
+    await loadCalendarStatus();
+  }
 }
 
 function escapeHtml(v) {
@@ -227,6 +233,13 @@ function formatDateTime(dateStr) {
   const d = parseDate(dateStr);
   if (!d) return '';
   return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function formatEventTime(event) {
+  if (event.all_day) return 'Dia inteiro';
+  const start = parseDate(event.start);
+  if (!start) return '';
+  return start.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
 function formatBytes(bytes) {
@@ -353,6 +366,34 @@ function renderTodaySection(title, tasks, extraClass = '') {
   `;
 }
 
+function renderCalendarEvent(event) {
+  const company = event.company ? `<span class="badge ${companyClass(event.company)}">${event.company}</span>` : '';
+  const location = event.location ? `<span class="calendar-location">${escapeHtml(event.location)}</span>` : '';
+  return `
+    <article class="today-task calendar-event">
+      <div class="calendar-time">${formatEventTime(event)}</div>
+      <h3>${escapeHtml(event.title)}</h3>
+      <div class="today-meta">
+        ${company}
+        ${location}
+      </div>
+    </article>
+  `;
+}
+
+function renderCalendarSection(title, events) {
+  const connected = state.calendarStatus?.connected || events.length > 0;
+  const emptyText = connected ? 'Nada aqui.' : 'Agenda não conectada.';
+  return `
+    <section class="today-section today-calendar">
+      <h3>${title}</h3>
+      <div class="today-section-list">
+        ${events.length ? events.map(renderCalendarEvent).join('') : `<p class="today-empty">${emptyText}</p>`}
+      </div>
+    </section>
+  `;
+}
+
 function renderToday() {
   if (!state.today) return;
   const summary = state.today.summary;
@@ -365,6 +406,8 @@ function renderToday() {
     renderTodaySection('Amanhã', state.today.tomorrow),
     renderTodaySection('Em andamento', state.today.in_progress),
     renderTodaySection('Alta prioridade', state.today.high_priority),
+    renderCalendarSection('Agenda hoje', state.calendarEvents.today),
+    renderCalendarSection('Agenda amanhã', state.calendarEvents.tomorrow),
   ].join('');
 
   setTodayCollapsed(state.todayCollapsed);
@@ -372,7 +415,61 @@ function renderToday() {
 
 async function loadToday() {
   state.today = await api('/api/tasks/today');
+  await loadCalendarEvents();
   renderToday();
+}
+
+function renderCalendarStatus() {
+  const title = document.querySelector('#calendarStatusTitle');
+  const text = document.querySelector('#calendarStatusText');
+  const connectButton = document.querySelector('#connectCalendarBtn');
+  if (!title || !text || !connectButton) return;
+
+  const status = state.calendarStatus;
+  if (status?.connected) {
+    title.textContent = 'Google Agenda conectada';
+    text.textContent = `Calendar ID: ${status.calendar_id || 'primary'}`;
+    connectButton.hidden = true;
+    return;
+  }
+
+  title.textContent = 'Agenda não conectada';
+  text.textContent = 'Google Agenda não conectada.';
+  connectButton.hidden = false;
+}
+
+async function loadCalendarStatus() {
+  try {
+    state.calendarStatus = await api('/api/calendar/status');
+  } catch (err) {
+    state.calendarStatus = { connected: false, calendar_id: 'primary' };
+  }
+  renderCalendarStatus();
+}
+
+async function connectGoogleCalendar() {
+  const result = await api('/api/calendar/oauth/start');
+  if (result.url) window.location.href = result.url;
+}
+
+async function loadCalendarEvents() {
+  try {
+    const [today, tomorrow] = await Promise.all([
+      api('/api/calendar/events?range=today'),
+      api('/api/calendar/events?range=tomorrow'),
+    ]);
+
+    state.calendarStatus = {
+      connected: Boolean(today.connected || tomorrow.connected),
+      calendar_id: state.calendarStatus?.calendar_id || 'primary',
+    };
+    state.calendarEvents = {
+      today: today.data || [],
+      tomorrow: tomorrow.data || [],
+    };
+  } catch (err) {
+    state.calendarEvents = { today: [], tomorrow: [] };
+  }
 }
 
 function setBackupMessage(message, type = '') {
@@ -1086,6 +1183,14 @@ document.querySelector('#refreshBackupsBtn').addEventListener('click', async () 
 
 document.querySelector('#runBackupBtn').addEventListener('click', async () => {
   await runManualBackup();
+});
+
+document.querySelector('#refreshCalendarBtn').addEventListener('click', async () => {
+  await loadCalendarStatus();
+});
+
+document.querySelector('#connectCalendarBtn').addEventListener('click', async () => {
+  await connectGoogleCalendar();
 });
 
 document.querySelectorAll('.app-nav-btn').forEach(btn => {

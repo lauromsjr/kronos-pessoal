@@ -207,11 +207,35 @@ O Kronos executa backup diário do SQLite às 03h e também permite backup manua
 
 São mantidos apenas os 7 backups mais recentes. A interface permite listar, gerar e baixar backups; restauração não é feita pelo app.
 
+### Google Agenda somente leitura
+
+O Kronos pode ler eventos da Google Agenda e exibir compromissos de hoje e amanhã dentro da visão **Hoje**. A integração usa OAuth Web Server Flow e o escopo `https://www.googleapis.com/auth/calendar.events.readonly`; ela não cria, edita nem exclui eventos.
+
+No Google Cloud, ative a Google Calendar API, crie um OAuth Client do tipo Web e configure a redirect URI:
+
+```text
+https://kronos.plugaimarketing.com/api/calendar/oauth/callback
+```
+
+Configure no EasyPanel:
+
+```env
+GOOGLE_CLIENT_ID=<client-id>
+GOOGLE_CLIENT_SECRET=<client-secret>
+GOOGLE_REDIRECT_URI=https://kronos.plugaimarketing.com/api/calendar/oauth/callback
+GOOGLE_CALENDAR_ID=primary
+GOOGLE_OAUTH_TOKEN_PATH=/app/data/google_calendar_token.json
+```
+
+O token OAuth é salvo em `/app/data`, junto do SQLite, então o volume persistente precisa estar mapeado. Depois do deploy, conecte pela aba **Configurações** em "Google Agenda".
+
+Use prefixos no título do evento para identificar a frente: `[Olympus]`, `[IbogaLiv]`, `[PlugAI]` ou `[Pessoal]`.
+
 ### Visão Hoje
 
 A visão **Hoje** usa o campo `due_date` das tarefas para montar um painel diário de execução. Ela mostra tarefas atrasadas, para hoje, para amanhã, em andamento e de alta prioridade, com atalho para abrir a tarefa no modal.
 
-O painel pode ser recolhido pela interface e ajuda a separar o que precisa de atenção no dia sem misturar com a lista completa de tarefas.
+O painel também pode mostrar eventos da Google Agenda para hoje e amanhã quando a integração estiver conectada. Ele pode ser recolhido pela interface e ajuda a separar o que precisa de atenção no dia sem misturar com a lista completa de tarefas.
 
 **Salvar e iniciar container.**
 
@@ -314,6 +338,11 @@ PLUGAI_API_URL=https://api.plugaimarketing.com
 PLUGAI_JWT=...
 GOOGLE_SERVICE_ACCOUNT_JSON=...
 GOOGLE_DRIVE_FOLDER_ID=...
+GOOGLE_CLIENT_ID=<client-id>
+GOOGLE_CLIENT_SECRET=<client-secret>
+GOOGLE_REDIRECT_URI=https://kronos.plugaimarketing.com/api/calendar/oauth/callback
+GOOGLE_CALENDAR_ID=primary
+GOOGLE_OAUTH_TOKEN_PATH=/app/data/google_calendar_token.json
 LAURO_PHONE=5562998441163
 KRONOS_AUTH_USERNAME=lauro
 KRONOS_AUTH_PASSWORD_HASH=<hash-gerado>
