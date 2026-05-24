@@ -422,20 +422,73 @@ h2, h3 { font-family: var(--font-title); }
 }
 
 .calendar-event {
-  background: #F8FAFC;
+  position: relative;
+  gap: 8px;
+  overflow: hidden;
+  border-color: rgba(26,54,93,0.12);
+  background: linear-gradient(180deg, #FFFFFF, #F8FAFC);
+  padding-left: 12px;
+}
+
+.calendar-event::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--navy);
+  opacity: 0.55;
+}
+
+.calendar-event.IbogaLiv::before { background: #16A34A; opacity: 0.85; }
+.calendar-event.Olympus::before { background: var(--gold); opacity: 0.9; }
+.calendar-event.PlugAI::before { background: #6366F1; opacity: 0.85; }
+.calendar-event.Pessoal::before { background: #64748B; opacity: 0.85; }
+
+.calendar-event-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .calendar-time {
-  color: var(--gold);
+  color: var(--navy);
   font-family: var(--font-title);
-  font-size: 0.7rem;
+  font-size: 0.82rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.calendar-event-title {
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.calendar-source,
+.calendar-duration {
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 0.64rem;
   font-weight: 900;
 }
 
+.calendar-duration {
+  color: var(--gold);
+  background: #FFFBEB;
+}
+
 .calendar-location {
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: var(--panel);
   color: var(--muted);
   font-size: 0.68rem;
   font-weight: 800;
+  overflow-wrap: anywhere;
 }
 
 /* ── BACKUPS ── */
