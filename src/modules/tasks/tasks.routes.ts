@@ -39,6 +39,7 @@ const statusInput = z.object({ status: z.enum(statuses) });
 const subtaskInput = z.object({
   title: z.string().trim().min(1),
   done:  z.boolean().optional().default(false),
+  due_date: nullableDueDate,
 });
 
 // ── Init subtasks table ──────────────────────────────────────────────────────
@@ -51,12 +52,18 @@ export async function ensureSubtasksTable() {
       task_id    INTEGER NOT NULL,
       title      TEXT NOT NULL,
       done       INTEGER NOT NULL DEFAULT 0,
+      due_date   TEXT NULL,
       position   INTEGER NOT NULL DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_subtasks_task ON subtasks(task_id, position);
   `);
+
+  const columns = await db.all<{ name: string }[]>('PRAGMA table_info(subtasks)');
+  if (!columns.some((column) => column.name === 'due_date')) {
+    await db.exec('ALTER TABLE subtasks ADD COLUMN due_date TEXT NULL;');
+  }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -490,8 +497,8 @@ router.post('/tasks/:id/subtasks', async (req, res, next) => {
     const maxPos = await db.get('SELECT MAX(position) as pos FROM subtasks WHERE task_id = ?', taskId);
     const position = (maxPos?.pos ?? -1) + 1;
     const result = await db.run(
-      'INSERT INTO subtasks (task_id, title, done, position) VALUES (?, ?, ?, ?)',
-      taskId, parsed.title, parsed.done ? 1 : 0, position
+      'INSERT INTO subtasks (task_id, title, done, due_date, position) VALUES (?, ?, ?, ?, ?)',
+      taskId, parsed.title, parsed.done ? 1 : 0, parsed.due_date ?? null, position
     );
     const created = await db.get('SELECT * FROM subtasks WHERE id = ?', result.lastID);
     res.status(201).json({ data: created });
@@ -505,12 +512,14 @@ router.patch('/subtasks/:id', async (req, res, next) => {
     const schema = z.object({
       title: z.string().trim().min(1).optional(),
       done:  z.boolean().optional(),
+      due_date: nullableDueDate,
     });
     const parsed = schema.parse(req.body);
     const updates: string[] = [];
     const values: unknown[]  = [];
     if ('title' in parsed) { updates.push('title = ?'); values.push(parsed.title); }
     if ('done'  in parsed) { updates.push('done = ?');  values.push(parsed.done ? 1 : 0); }
+    if ('due_date' in parsed) { updates.push('due_date = ?'); values.push(parsed.due_date ?? null); }
     if (!updates.length) return res.status(400).json({ error: 'Nothing to update' });
     await db.run(`UPDATE subtasks SET ${updates.join(', ')} WHERE id = ?`, [...values, id]);
     const updated = await db.get('SELECT * FROM subtasks WHERE id = ?', id);
