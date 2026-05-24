@@ -383,7 +383,7 @@ async function loadTasks() {
   if (state.list === 'Concluida') state.completedPage = 1;
 
   const params = state.list === 'Concluida'
-    ? { list: 'Concluida', page: state.completedPage, limit: 20, search: state.search }
+    ? { list: 'Concluida', page: state.completedPage, limit: 20, search: state.search, company: state.company, impact: state.impact }
     : { list: state.list, company: state.company, impact: state.impact, search: state.search };
 
   const result = await api(`/api/tasks?${qs(params)}`);
@@ -403,7 +403,14 @@ async function loadTasks() {
 
 async function loadMoreCompleted() {
   state.completedPage += 1;
-  const result = await api(`/api/tasks?${qs({ list: 'Concluida', page: state.completedPage, limit: 20, search: state.search })}`);
+  const result = await api(`/api/tasks?${qs({
+    list: 'Concluida',
+    page: state.completedPage,
+    limit: 20,
+    search: state.search,
+    company: state.company,
+    impact: state.impact,
+  })}`);
   state.tasks = [...state.tasks, ...(result.data || [])];
   state.completedHasMore = Boolean(result.pagination?.has_more);
   render();
