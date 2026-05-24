@@ -345,7 +345,7 @@ h2, h3 { font-family: var(--font-title); }
 
 .today-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
 }
 
@@ -361,6 +361,7 @@ h2, h3 { font-family: var(--font-title); }
 }
 
 .today-section.today-overdue { border-top-color: rgba(220,38,38,0.35); }
+.today-section.today-calendar { border-top-color: rgba(26,54,93,0.22); }
 
 .today-section > h3 {
   color: var(--navy);
@@ -418,6 +419,23 @@ h2, h3 { font-family: var(--font-title); }
   font-size: 0.76rem;
   font-weight: 700;
   padding: 9px 0;
+}
+
+.calendar-event {
+  background: #F8FAFC;
+}
+
+.calendar-time {
+  color: var(--gold);
+  font-family: var(--font-title);
+  font-size: 0.7rem;
+  font-weight: 900;
+}
+
+.calendar-location {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
 }
 
 /* ── BACKUPS ── */
@@ -520,6 +538,18 @@ h2, h3 { font-family: var(--font-title); }
   color: var(--text-mid);
   font-size: 0.84rem;
   line-height: 1.35;
+}
+
+.settings-note {
+  color: var(--text-mid);
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .settings-view .backup-panel {

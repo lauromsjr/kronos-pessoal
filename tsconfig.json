@@ -19,6 +19,7 @@
     "src/database/sqlite.ts",
     "src/modules/auth/**/*.ts",
     "src/modules/backup/**/*.ts",
+    "src/modules/calendar/**/*.ts",
     "src/modules/cron/**/*.ts",
     "src/modules/tasks/**/*.ts"
   ],
