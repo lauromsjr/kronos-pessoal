@@ -14,6 +14,7 @@ const state = {
   allTasks:  [],
   stats:     null,
   today:      null,
+  dailyReview: null,
   todayCollapsed: localStorage.getItem('Kronos_TODAY_COLLAPSED') === 'true',
   activeView: 'execution',
   backupsLoaded: false,
@@ -238,6 +239,15 @@ function formatDateTime(dateStr) {
   return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+function dateKeySaoPaulo(date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
 function formatEventTimeRange(event) {
   if (event.all_day) return { time: 'Dia inteiro', duration: '' };
 
@@ -449,6 +459,160 @@ async function loadToday() {
   state.today = await api('/api/tasks/today');
   await loadCalendarEvents();
   renderToday();
+}
+
+function dailyReviewStatusLabel(status) {
+  if (status === 'started') return 'Em andamento';
+  if (status === 'closed') return 'Encerrado';
+  return 'Não iniciado';
+}
+
+function dailyCandidateTasks() {
+  if (!state.today) return [];
+  const map = new Map();
+  [
+    ...(state.today.overdue || []),
+    ...(state.today.today || []),
+    ...(state.today.in_progress || []),
+    ...(state.today.high_priority || []),
+  ].forEach((task) => {
+    if (!map.has(task.id)) map.set(task.id, task);
+  });
+  return [...map.values()];
+}
+
+function taskById(id) {
+  return dailyCandidateTasks().find((task) => task.id === id)
+    || state.allTasks.find((task) => task.id === id)
+    || state.tasks.find((task) => task.id === id);
+}
+
+function selectedPriorityTasks() {
+  const ids = state.dailyReview?.selected_priority_task_ids || [];
+  return ids.map((id) => taskById(id) || { id, title: `Tarefa #${id}`, company: null, impact: '-', status: '-' });
+}
+
+function renderDailyReview() {
+  const review = state.dailyReview;
+  const statusEl = document.querySelector('#dailyReviewStatus');
+  const metaEl = document.querySelector('#dailyReviewMeta');
+  const bodyEl = document.querySelector('#dailyReviewBody');
+  const startBtn = document.querySelector('#startDayBtn');
+  const closeBtn = document.querySelector('#closeDayBtn');
+  if (!review || !statusEl || !metaEl || !bodyEl) return;
+
+  statusEl.textContent = dailyReviewStatusLabel(review.status);
+  statusEl.dataset.status = review.status;
+  metaEl.textContent = `${formatDate(review.review_date)} · ${dailyReviewStatusLabel(review.status)}`;
+  startBtn.disabled = review.status === 'closed';
+  closeBtn.disabled = review.status === 'not_started';
+
+  const priorities = selectedPriorityTasks();
+  const prioritiesHtml = priorities.length
+    ? `<div class="daily-priority-pills">${priorities.map(task => `<span>${escapeHtml(task.title)}</span>`).join('')}</div>`
+    : '<p class="daily-empty">Nenhuma prioridade escolhida ainda.</p>';
+
+  if (review.status === 'closed') {
+    bodyEl.innerHTML = `
+      ${prioritiesHtml}
+      ${review.summary ? `<p class="daily-review-note"><strong>Resumo:</strong> ${escapeHtml(review.summary)}</p>` : ''}
+      ${review.tomorrow_focus ? `<p class="daily-review-note"><strong>Foco de amanhã:</strong> ${escapeHtml(review.tomorrow_focus)}</p>` : ''}
+    `;
+    return;
+  }
+
+  bodyEl.innerHTML = prioritiesHtml;
+}
+
+async function loadDailyReview() {
+  const result = await api('/api/daily-review/today');
+  state.dailyReview = result.data || result;
+  renderDailyReview();
+}
+
+function renderStartDayOptions() {
+  const selected = new Set(state.dailyReview?.selected_priority_task_ids || []);
+  const candidates = dailyCandidateTasks();
+  const list = document.querySelector('#startPriorityList');
+  const count = document.querySelector('#startDayCount');
+  count.textContent = `${selected.size}/3 prioridades selecionadas`;
+
+  list.innerHTML = candidates.length
+    ? candidates.map((task) => `
+      <label class="daily-task-option">
+        <input type="checkbox" value="${task.id}" ${selected.has(task.id) ? 'checked' : ''} />
+        <span>
+          <strong>${escapeHtml(task.title)}</strong>
+          <small>${companyLabel(task.company)} · ${task.impact} · ${task.status}</small>
+        </span>
+      </label>
+    `).join('')
+    : '<p class="daily-empty">Nenhuma tarefa candidata para prioridade.</p>';
+
+  document.querySelector('#startAgendaContext').innerHTML = state.calendarEvents.today.length
+    ? state.calendarEvents.today.map((event) => {
+        const { time } = formatEventTimeRange(event);
+        return `<p class="daily-agenda-line"><strong>${time}</strong> ${escapeHtml(cleanCalendarTitle(event.title))}</p>`;
+      }).join('')
+    : '<p class="daily-empty">Nenhum compromisso hoje.</p>';
+}
+
+function openStartDayModal() {
+  renderStartDayOptions();
+  document.querySelector('#startDayModal').showModal();
+}
+
+async function saveStartDay(event) {
+  event.preventDefault();
+  const ids = [...document.querySelectorAll('#startPriorityList input:checked')].map(input => Number(input.value));
+  const result = await api('/api/daily-review/start', {
+    method: 'POST',
+    body: JSON.stringify({ selected_priority_task_ids: ids }),
+  });
+  state.dailyReview = result.data || result;
+  document.querySelector('#startDayModal').close();
+  renderDailyReview();
+}
+
+async function completedTasksToday() {
+  const result = await api('/api/tasks?list=Concluida&page=1&limit=50');
+  const todayKey = dateKeySaoPaulo(new Date());
+  return (result.data || []).filter((task) => {
+    const completed = parseDate(task.completed_at);
+    return completed && dateKeySaoPaulo(completed) === todayKey;
+  });
+}
+
+async function openCloseDayModal() {
+  const priorities = selectedPriorityTasks();
+  const completed = await completedTasksToday();
+  const inProgress = state.today?.in_progress || [];
+  const pendingPriorities = priorities.filter(task => task.status !== 'Concluída');
+  document.querySelector('#closeDaySummary').innerHTML = `
+    <div><strong>Prioridades:</strong> ${priorities.length ? priorities.map(task => escapeHtml(task.title)).join(' · ') : 'nenhuma'}</div>
+    <div><strong>Concluídas hoje:</strong> ${completed.length}</div>
+    <div><strong>Em andamento:</strong> ${inProgress.length}</div>
+    <div><strong>Prioridades pendentes:</strong> ${pendingPriorities.length}</div>
+  `;
+  document.querySelector('#daySummaryInput').value = state.dailyReview?.summary || '';
+  document.querySelector('#dayBlockersInput').value = state.dailyReview?.blockers || '';
+  document.querySelector('#dayTomorrowFocusInput').value = state.dailyReview?.tomorrow_focus || '';
+  document.querySelector('#closeDayModal').showModal();
+}
+
+async function saveCloseDay(event) {
+  event.preventDefault();
+  const result = await api('/api/daily-review/close', {
+    method: 'POST',
+    body: JSON.stringify({
+      summary: document.querySelector('#daySummaryInput').value,
+      blockers: document.querySelector('#dayBlockersInput').value,
+      tomorrow_focus: document.querySelector('#dayTomorrowFocusInput').value,
+    }),
+  });
+  state.dailyReview = result.data || result;
+  document.querySelector('#closeDayModal').close();
+  renderDailyReview();
 }
 
 function renderCalendarStatus() {
@@ -995,6 +1159,7 @@ async function loadTasks() {
   await loadAllTasks();
   await loadStats();
   await loadToday();
+  await loadDailyReview();
   updateMetrics();
 
   const isConcluida = state.list === 'Concluida';
@@ -1327,6 +1492,31 @@ document.querySelectorAll('.app-nav-btn').forEach(btn => {
 
 document.querySelector('#todayToggleBtn').addEventListener('click', () => {
   setTodayCollapsed(!state.todayCollapsed);
+});
+
+document.querySelector('#startDayBtn').addEventListener('click', () => {
+  openStartDayModal();
+});
+
+document.querySelector('#closeDayBtn').addEventListener('click', async () => {
+  await openCloseDayModal();
+});
+
+document.querySelector('#closeStartDayBtn').addEventListener('click', () => document.querySelector('#startDayModal').close());
+document.querySelector('#cancelStartDayBtn').addEventListener('click', () => document.querySelector('#startDayModal').close());
+document.querySelector('#closeCloseDayBtn').addEventListener('click', () => document.querySelector('#closeDayModal').close());
+document.querySelector('#cancelCloseDayBtn').addEventListener('click', () => document.querySelector('#closeDayModal').close());
+document.querySelector('#startDayForm').addEventListener('submit', saveStartDay);
+document.querySelector('#closeDayForm').addEventListener('submit', saveCloseDay);
+
+document.querySelector('#startPriorityList').addEventListener('change', (e) => {
+  const checked = [...document.querySelectorAll('#startPriorityList input:checked')];
+  if (checked.length > 3) {
+    e.target.checked = false;
+    alert('Escolha no máximo 3 prioridades.');
+  }
+  document.querySelector('#startDayCount').textContent =
+    `${document.querySelectorAll('#startPriorityList input:checked').length}/3 prioridades selecionadas`;
 });
 
 const toggleEl = document.querySelector('#viewModeToggle');

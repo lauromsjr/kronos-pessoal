@@ -247,6 +247,19 @@ A visão **Hoje** usa o campo `due_date` das tarefas para montar um painel diár
 
 O painel também pode mostrar eventos da Google Agenda para hoje e amanhã quando a integração estiver conectada. Ele pode ser recolhido pela interface e ajuda a separar o que precisa de atenção no dia sem misturar com a lista completa de tarefas.
 
+### Rotina diária
+
+A aba **Execução** possui o card **Rotina diária**, com dois momentos:
+
+```text
+Começar dia -> escolher até 3 prioridades
+Encerrar dia -> registrar resumo, bloqueios e foco de amanhã
+```
+
+Cada dia gera no SQLite um registro único em `daily_reviews`, identificado por `review_date` em `YYYY-MM-DD` no fuso `America/Sao_Paulo`. A rotina usa a Visão Hoje como contexto, incluindo tarefas atrasadas, tarefas de hoje, em andamento, alta prioridade e Agenda hoje.
+
+Esta fase não usa IA, não envia WhatsApp, não cria gráficos semanais e não altera o Kanban.
+
 **Salvar e iniciar container.**
 
 ---
