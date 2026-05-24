@@ -9,9 +9,13 @@ const state = {
   list:      'Tarefa',
   company:   '',
   impact:    '',
+  search:    '',
   tasks:     [],
   allTasks:  [],
+  stats:     null,
   subtasks:  {}, // taskId → []
+  completedPage: 1,
+  completedHasMore: false,
 };
 
 const board = document.querySelector('#taskBoard');
@@ -25,6 +29,7 @@ const fields = {
   impact:  document.querySelector('#impactInput'),
   list:    document.querySelector('#listInput'),
   status:  document.querySelector('#statusInput'),
+  dueDate: document.querySelector('#dueDateInput'),
   notes:   document.querySelector('#notesInput'),
 };
 
@@ -39,16 +44,47 @@ function qs(params) {
 }
 
 async function api(path, options = {}) {
+  const key = localStorage.getItem('KRONOS_API_KEY');
+  const { _retriedAuth, headers = {}, ...fetchOptions } = options;
   const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    ...options,
+    ...fetchOptions,
+    headers: { 'Content-Type': 'application/json', ...(key ? { 'X-Api-Key': key } : {}), ...headers },
   });
+  if (res.status === 401 && !_retriedAuth) {
+    const nextKey = prompt('Informe a chave de acesso do Kronos');
+    if (nextKey) {
+      localStorage.setItem('KRONOS_API_KEY', nextKey);
+      return api(path, { ...options, _retriedAuth: true });
+    }
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || 'Erro na API');
   }
   if (res.status === 204) return null;
   return res.json();
+}
+
+async function downloadCsv() {
+  const key = localStorage.getItem('KRONOS_API_KEY');
+  const res = await fetch('/api/tasks/export?format=csv', {
+    headers: key ? { 'X-Api-Key': key } : {},
+  });
+  if (res.status === 401) {
+    const nextKey = prompt('Informe a chave de acesso do Kronos');
+    if (nextKey) localStorage.setItem('KRONOS_API_KEY', nextKey);
+    else throw new Error('Unauthorized');
+    return downloadCsv();
+  }
+  if (!res.ok) throw new Error('Erro ao exportar CSV');
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'kronos_tasks.csv';
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function escapeHtml(v) {
@@ -106,6 +142,31 @@ function formatDate(dateStr) {
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+function companyLabel(company) {
+  return company || 'Sem empresa';
+}
+
+function companyClass(company) {
+  return company || 'SemEmpresa';
+}
+
+function dueDateClass(dueDate) {
+  if (!dueDate) return '';
+  const today = new Date();
+  const current = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const due = new Date(`${dueDate}T00:00:00`);
+  const diff = Math.round((due.getTime() - current.getTime()) / 86400000);
+  if (diff < 0) return 'overdue';
+  if (diff === 0) return 'today';
+  return '';
+}
+
+function dueDateText(dueDate) {
+  const cls = dueDateClass(dueDate);
+  const label = cls === 'overdue' ? 'Vencido' : cls === 'today' ? 'Hoje' : 'Prazo';
+  return `${label}: ${formatDate(dueDate)}`;
+}
+
 function impactChipClass(impact) {
   if (impact === 'Alto')  return 'chip-impact-alto';
   if (impact === 'Médio') return 'chip-impact-medio';
@@ -115,6 +176,12 @@ function impactChipClass(impact) {
 function sortByPriority(tasks) {
   const order = { Alto: 0, 'Médio': 1, Baixo: 2 };
   return [...tasks].sort((a, b) => {
+    if (a.due_date || b.due_date) {
+      if (!a.due_date) return 1;
+      if (!b.due_date) return -1;
+      const dueDiff = new Date(a.due_date) - new Date(b.due_date);
+      if (dueDiff !== 0) return dueDiff;
+    }
     const diff = (order[a.impact] ?? 3) - (order[b.impact] ?? 3);
     if (diff !== 0) return diff;
     return new Date(a.created_at) - new Date(b.created_at);
@@ -130,16 +197,30 @@ async function loadAllTasks() {
   state.allTasks = result.data || [];
 }
 
+async function loadStats() {
+  const stats = await api('/api/tasks/stats');
+  state.stats = stats;
+  document.querySelector('#statusSummary').textContent =
+    `Em andamento (${stats.by_status['Em andamento'] || 0}) · A fazer (${stats.by_status['A fazer'] || 0}) · Pausada (${stats.by_status.Pausada || 0})`;
+  document.querySelector('#tabBadgeConcluida').textContent = stats.by_status['Concluída'] || 0;
+
+  const colors = { IbogaLiv: '#16A34A', Olympus: '#B8960C', PlugAI: '#6366F1', Pessoal: '#64748B', 'Sem empresa': '#94A3B8' };
+  document.querySelector('#distBar').innerHTML = Object.entries(stats.by_company)
+    .filter(([, count]) => count > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([company, count]) => `
+      <div class="dist-item">
+        <span class="dist-dot" style="background:${colors[company] || '#888'}"></span>
+        <span>${company}</span>
+        <span class="dist-num">${count}</span>
+      </div>
+    `).join('');
+}
+
 function updateMetrics() {
   const all = state.allTasks;
 
   const counts = { Tarefa: 0, Backlog: 0, Ideia: 0, Concluida: 0 };
-
-  // Busca concluídas separado
-  api('/api/tasks?list=Concluida').then(r => {
-    const concluidas = r?.data || [];
-    document.querySelector('#tabBadgeConcluida').textContent = concluidas.length;
-  }).catch(() => {});
 
   all.forEach(t => { if (counts[t.list_type] !== undefined) counts[t.list_type]++; });
 
@@ -165,20 +246,13 @@ function updateMetrics() {
     ? Math.round((tarefasAll.filter(t => t.status === 'Concluída').length / tarefasAll.length) * 100)
     : 0;
 
-  // Busca concluídas para o progresso real
-  api('/api/tasks?list=Concluida').then(r => {
-    const done = r?.data?.length || 0;
-    const total = tarefasAll.length + done;
-    const realPct = total > 0 ? Math.round((done / total) * 100) : 0;
-    const offset = 163.4 - (realPct / 100) * 163.4;
-    document.querySelector('#progressRing').style.strokeDashoffset = offset;
-    document.querySelector('#progressPct').textContent = `${realPct}%`;
-    document.querySelector('#progressSub').textContent = `${done}/${total} tarefas`;
-  }).catch(() => {
-    const offset = 163.4 - (pct / 100) * 163.4;
-    document.querySelector('#progressRing').style.strokeDashoffset = offset;
-    document.querySelector('#progressPct').textContent = `${pct}%`;
-  });
+  const done = state.stats?.by_status?.['Concluída'] || 0;
+  const total = tarefasAll.length + done;
+  const realPct = total > 0 ? Math.round((done / total) * 100) : pct;
+  const offset = 163.4 - (realPct / 100) * 163.4;
+  document.querySelector('#progressRing').style.strokeDashoffset = offset;
+  document.querySelector('#progressPct').textContent = `${realPct}%`;
+  document.querySelector('#progressSub').textContent = `${done}/${total} tarefas`;
 
   // Métricas extras no card de progresso
   document.querySelector('#metricExtra').innerHTML = `
@@ -195,20 +269,6 @@ function updateMetrics() {
       <strong>${urgentes}</strong>
     </div>
   `;
-
-  // Distribuição
-  const dist = {};
-  all.forEach(t => { dist[t.company] = (dist[t.company] || 0) + 1; });
-  const colors = { IbogaLiv: '#16A34A', Olympus: '#B8960C', PlugAI: '#6366F1', Pessoal: '#64748B' };
-  document.querySelector('#distBar').innerHTML = Object.entries(dist)
-    .sort((a, b) => b[1] - a[1])
-    .map(([company, count]) => `
-      <div class="dist-item">
-        <span class="dist-dot" style="background:${colors[company] || '#888'}"></span>
-        <span>${company}</span>
-        <span class="dist-num">${count}</span>
-      </div>
-    `).join('');
 
   document.querySelectorAll('.metric-card[data-list]').forEach(card => {
     card.classList.toggle('active', card.dataset.list === state.list);
@@ -227,6 +287,9 @@ function renderTaskCard(task, index, isConcluida) {
   const impactCls = impactChipClass(task.impact);
   const num     = index + 1;
   const ageTitle = days < 1 ? 'Criada hoje' : `No sistema há ${age}`;
+  const company = companyLabel(task.company);
+  const badgeClass = companyClass(task.company);
+  const dueHtml = task.due_date ? `<span class="due-date ${dueDateClass(task.due_date)}">${dueDateText(task.due_date)}</span>` : '';
 
   // Barra de progresso de subtarefas
   const total = task.subtasks_total || 0;
@@ -252,10 +315,11 @@ function renderTaskCard(task, index, isConcluida) {
       <article class="task task-concluida" data-impact="${task.impact}">
         <span class="priority-num">${num}</span>
         <div class="task-meta">
-          <span class="badge ${task.company}">${task.company}</span>
+          <span class="badge ${badgeClass}">${company}</span>
           <span class="chip ${impactCls}">${task.impact}</span>
         </div>
         <h3>${escapeHtml(task.title)}</h3>
+        ${dueHtml}
         ${progressHtml}
         <div class="task-footer">
           ${completedStr ? `<span class="completed-date">✓ Concluída em ${completedStr}</span>` : '<span class="completed-date">✓ Concluída</span>'}
@@ -270,7 +334,7 @@ function renderTaskCard(task, index, isConcluida) {
     <article class="task" data-impact="${task.impact}">
       <span class="priority-num">${num}</span>
       <div class="task-meta">
-        <span class="badge ${task.company}">${task.company}</span>
+        <span class="badge ${badgeClass}">${company}</span>
         <span class="chip ${impactCls}">${task.impact}</span>
         <span class="chip">${task.status}</span>
         <span class="task-age ${cls}" title="${ageTitle}">
@@ -281,6 +345,7 @@ function renderTaskCard(task, index, isConcluida) {
         </span>
       </div>
       <h3>${escapeHtml(task.title)}</h3>
+      ${dueHtml}
       ${progressHtml}
       <div class="task-footer">
         <select aria-label="Status" data-status-id="${task.id}">
@@ -315,21 +380,34 @@ function render() {
 // ============================================
 
 async function loadTasks() {
+  if (state.list === 'Concluida') state.completedPage = 1;
+
   const params = state.list === 'Concluida'
-    ? { list: 'Concluida' }
-    : { list: state.list, company: state.company, impact: state.impact };
+    ? { list: 'Concluida', page: state.completedPage, limit: 20, search: state.search }
+    : { list: state.list, company: state.company, impact: state.impact, search: state.search };
 
   const result = await api(`/api/tasks?${qs(params)}`);
   state.tasks = result.data;
+  state.completedHasMore = Boolean(result.pagination?.has_more);
   await loadAllTasks();
+  await loadStats();
   updateMetrics();
   render();
+  document.querySelector('#loadMoreBtn').hidden = !(state.list === 'Concluida' && state.completedHasMore);
 
   // Oculta legenda e filtros na aba concluídas
   const isConcluida = state.list === 'Concluida';
   document.querySelector('#urgencyLegend').style.display = isConcluida ? 'none' : '';
-  document.querySelector('#mainFilters').style.display   = isConcluida ? 'none' : '';
   document.querySelector('#addTaskBtn').style.display    = isConcluida ? 'none' : '';
+}
+
+async function loadMoreCompleted() {
+  state.completedPage += 1;
+  const result = await api(`/api/tasks?${qs({ list: 'Concluida', page: state.completedPage, limit: 20, search: state.search })}`);
+  state.tasks = [...state.tasks, ...(result.data || [])];
+  state.completedHasMore = Boolean(result.pagination?.has_more);
+  render();
+  document.querySelector('#loadMoreBtn').hidden = !state.completedHasMore;
 }
 
 // ============================================
@@ -407,10 +485,11 @@ document.querySelector('#subtaskList').addEventListener('click', async (e) => {
 function resetForm() {
   fields.id.value      = '';
   fields.title.value   = '';
-  fields.company.value = 'IbogaLiv';
+  fields.company.value = '';
   fields.impact.value  = 'Médio';
   fields.list.value    = state.list === 'Concluida' ? 'Tarefa' : state.list;
   fields.status.value  = 'A fazer';
+  fields.dueDate.value = '';
   fields.notes.value   = '';
   document.querySelector('#modalTitle').textContent = 'Nova tarefa';
   document.querySelector('#taskDetail').hidden      = true;
@@ -426,10 +505,11 @@ async function openTask(id) {
 
   fields.id.value      = task.id;
   fields.title.value   = task.title;
-  fields.company.value = task.company;
+  fields.company.value = task.company || '';
   fields.impact.value  = task.impact;
   fields.list.value    = task.list_type;
   fields.status.value  = task.status;
+  fields.dueDate.value = task.due_date || '';
   fields.notes.value   = task.notes || '';
 
   document.querySelector('#modalTitle').textContent = 'Editar tarefa';
@@ -460,6 +540,7 @@ async function saveTask(event) {
     impact:    fields.impact.value,
     list_type: fields.list.value,
     status:    fields.status.value,
+    due_date:  fields.dueDate.value || null,
     notes:     fields.notes.value,
   };
 
@@ -537,6 +618,21 @@ document.querySelector('#companyFilter').addEventListener('change', async (e) =>
 document.querySelector('#impactFilter').addEventListener('change', async (e) => {
   state.impact = e.target.value;
   await loadTasks();
+});
+
+let searchTimer = null;
+document.querySelector('#searchInput').addEventListener('input', (e) => {
+  state.search = e.target.value.trim();
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { loadTasks(); }, 300);
+});
+
+document.querySelector('#exportCsvBtn').addEventListener('click', async () => {
+  await downloadCsv();
+});
+
+document.querySelector('#loadMoreBtn').addEventListener('click', async () => {
+  await loadMoreCompleted();
 });
 
 board.addEventListener('change', async (e) => {

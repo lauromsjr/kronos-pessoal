@@ -2,10 +2,13 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { initTaskSchema } from './database/sqlite';
-import { tasksRouter } from './modules/tasks/tasks.routes';
+import { ensureSubtasksTable, tasksRouter } from './modules/tasks/tasks.routes';
+import { startDailySqliteBackup } from './modules/cron/backup';
 
 async function bootstrap() {
   await initTaskSchema();
+  await ensureSubtasksTable();
+  startDailySqliteBackup();
 
   const app = express();
   const publicDir = fs.existsSync(path.join(__dirname, 'public'))

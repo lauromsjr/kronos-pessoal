@@ -171,6 +171,17 @@ Restart policy:    always
 Health check:      GET http://localhost:3002/health
 ```
 
+### Volume persistente do SQLite
+
+O app de tarefas usa SQLite quando `SQLITE_PATH=/app/data/kronos.sqlite`.
+No EasyPanel, mapeie `/app/data` para um volume persistente do container.
+Sem esse volume, o arquivo `kronos.sqlite` pode ser perdido ao recriar ou redeployar o container.
+
+Exemplo:
+```text
+/app/data -> volume persistente kronos-data
+```
+
 **Salvar e iniciar container.**
 
 ---

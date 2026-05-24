@@ -17,6 +17,7 @@
   "include": [
     "src/app.ts",
     "src/database/sqlite.ts",
+    "src/modules/cron/**/*.ts",
     "src/modules/tasks/**/*.ts"
   ],
   "exclude": ["node_modules", "dist"]

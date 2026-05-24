@@ -9,6 +9,10 @@ let connection: KronosDb | null = null;
 
 const dbPath = process.env.SQLITE_PATH || path.join(process.cwd(), 'data', 'kronos.sqlite');
 
+export function getSqlitePath(): string {
+  return dbPath;
+}
+
 export async function getDb(): Promise<KronosDb> {
   if (connection) return connection;
 
@@ -56,4 +60,9 @@ export async function initTaskSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_task_status_history_task
       ON task_status_history(task_id, changed_at DESC);
   `);
+
+  const columns = await db.all<{ name: string }[]>('PRAGMA table_info(tasks)');
+  if (!columns.some((column) => column.name === 'due_date')) {
+    await db.exec('ALTER TABLE tasks ADD COLUMN due_date DATE NULL;');
+  }
 }

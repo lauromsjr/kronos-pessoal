@@ -53,6 +53,9 @@
       </section>
 
       <!-- DISTRIBUIÇÃO -->
+      <section class="status-summary" id="statusSummary" aria-label="Resumo por status">
+        Em andamento (0) · A fazer (0) · Pausada (0)
+      </section>
       <section class="dist-bar" id="distBar" aria-label="Distribuição por empresa"></section>
 
       <!-- TOOLBAR -->
@@ -74,6 +77,10 @@
 
         <div class="filters" id="mainFilters">
           <label>
+            Busca
+            <input id="searchInput" placeholder="Buscar tarefa..." />
+          </label>
+          <label>
             Empresa
             <select id="companyFilter">
               <option value="">Todas</option>
@@ -92,6 +99,7 @@
               <option>Baixo</option>
             </select>
           </label>
+          <button class="btn-secondary" id="exportCsvBtn" type="button">Exportar CSV</button>
         </div>
       </section>
 
@@ -104,6 +112,9 @@
 
       <!-- BOARD -->
       <section class="board" id="taskBoard" aria-live="polite"></section>
+      <div class="load-more-wrap">
+        <button class="btn-secondary" id="loadMoreBtn" type="button" hidden>Carregar mais</button>
+      </div>
 
     </main>
 
@@ -126,6 +137,7 @@
           <label>
             Empresa
             <select id="companyInput">
+              <option value="">Sem empresa</option>
               <option>IbogaLiv</option>
               <option>Olympus</option>
               <option>PlugAI</option>
@@ -161,6 +173,11 @@
             </select>
           </label>
         </div>
+
+        <label>
+          Prazo
+          <input id="dueDateInput" type="date" />
+        </label>
 
         <label>
           Notas
