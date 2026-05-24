@@ -5,12 +5,14 @@ import { initTaskSchema } from './database/sqlite';
 import { authRouter } from './modules/auth/auth.routes';
 import { backupRouter } from './modules/backup/backup.routes';
 import { calendarRouter } from './modules/calendar/calendar.routes';
+import { dailyReviewRouter, ensureDailyReviewTable } from './modules/dailyReview/dailyReview.routes';
 import { ensureSubtasksTable, tasksRouter } from './modules/tasks/tasks.routes';
 import { startDailySqliteBackup } from './modules/cron/backup';
 
 async function bootstrap() {
   await initTaskSchema();
   await ensureSubtasksTable();
+  await ensureDailyReviewTable();
   startDailySqliteBackup();
 
   const app = express();
@@ -28,6 +30,7 @@ async function bootstrap() {
   app.use('/api', authRouter);
   app.use('/api', backupRouter);
   app.use('/api', calendarRouter);
+  app.use('/api', dailyReviewRouter);
   app.use('/api', tasksRouter);
 
   app.get('*', (_req, res) => {

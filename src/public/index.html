@@ -96,6 +96,22 @@
           <div class="today-grid" id="todayGrid"></div>
         </section>
 
+        <section class="daily-review-card" id="dailyReviewCard" aria-label="Rotina diária">
+          <div class="daily-review-head">
+            <div>
+              <span class="metric-label">Rotina diária</span>
+              <h2>Começar e encerrar o dia</h2>
+              <p id="dailyReviewMeta">Carregando rotina de hoje...</p>
+            </div>
+            <span class="daily-review-status" id="dailyReviewStatus">Não iniciado</span>
+          </div>
+          <div class="daily-review-body" id="dailyReviewBody"></div>
+          <div class="daily-review-actions">
+            <button class="btn-secondary" id="startDayBtn" type="button">Começar dia</button>
+            <button class="btn-primary" id="closeDayBtn" type="button">Encerrar dia</button>
+          </div>
+        </section>
+
         <!-- TOOLBAR -->
         <section class="toolbar" aria-label="Filtros">
           <nav class="tabs" aria-label="Listas">
@@ -332,6 +348,52 @@
           <button class="btn-danger" id="deleteBtn" type="button" hidden>Excluir</button>
           <button class="btn-secondary" id="cancelBtn" type="button">Cancelar</button>
           <button class="btn-primary" type="submit">Salvar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="startDayModal">
+      <form class="modal daily-modal" id="startDayForm" method="dialog">
+        <div class="modal-head">
+          <h2>Começar dia</h2>
+          <button class="btn-icon" id="closeStartDayBtn" type="button" aria-label="Fechar">✕</button>
+        </div>
+        <p class="daily-modal-note">Escolha até 3 prioridades para executar hoje.</p>
+        <div class="daily-selection-count" id="startDayCount">0/3 prioridades selecionadas</div>
+        <div class="daily-priority-list" id="startPriorityList"></div>
+        <section class="daily-agenda-context">
+          <span class="detail-label">Agenda hoje</span>
+          <div id="startAgendaContext"></div>
+        </section>
+        <div class="modal-actions">
+          <button class="btn-secondary" id="cancelStartDayBtn" type="button">Cancelar</button>
+          <button class="btn-primary" type="submit">Salvar início do dia</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="closeDayModal">
+      <form class="modal daily-modal" id="closeDayForm" method="dialog">
+        <div class="modal-head">
+          <h2>Encerrar dia</h2>
+          <button class="btn-icon" id="closeCloseDayBtn" type="button" aria-label="Fechar">✕</button>
+        </div>
+        <section class="daily-close-summary" id="closeDaySummary"></section>
+        <label>
+          Resumo do dia
+          <textarea id="daySummaryInput" rows="3" placeholder="O que avançou hoje?"></textarea>
+        </label>
+        <label>
+          Bloqueios / pendências
+          <textarea id="dayBlockersInput" rows="3" placeholder="O que ficou travado ou pendente?"></textarea>
+        </label>
+        <label>
+          Foco de amanhã
+          <textarea id="dayTomorrowFocusInput" rows="3" placeholder="Qual é o foco principal de amanhã?"></textarea>
+        </label>
+        <div class="modal-actions">
+          <button class="btn-secondary" id="cancelCloseDayBtn" type="button">Cancelar</button>
+          <button class="btn-primary" type="submit">Salvar encerramento</button>
         </div>
       </form>
     </dialog>

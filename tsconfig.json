@@ -21,6 +21,7 @@
     "src/modules/backup/**/*.ts",
     "src/modules/calendar/**/*.ts",
     "src/modules/cron/**/*.ts",
+    "src/modules/dailyReview/**/*.ts",
     "src/modules/tasks/**/*.ts"
   ],
   "exclude": ["node_modules", "dist"]
