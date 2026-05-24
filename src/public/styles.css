@@ -272,6 +272,77 @@ h2, h3 { font-family: var(--font-title); }
 .dist-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .dist-num { font-family: var(--font-title); font-weight: 700; color: var(--navy); }
 
+/* ── BACKUPS ── */
+.backup-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 14px 16px;
+  margin-bottom: 18px;
+}
+
+.backup-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.backup-message {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.backup-message.success { color: var(--success); }
+.backup-message.error { color: var(--danger); }
+
+.backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.backup-list {
+  display: grid;
+  gap: 6px;
+}
+
+.backup-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  color: var(--text-mid);
+  font-size: 0.78rem;
+}
+
+.backup-file {
+  font-family: var(--font-title);
+  font-weight: 700;
+  color: var(--navy);
+  overflow-wrap: anywhere;
+}
+
+.backup-meta {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.backup-download {
+  color: var(--gold);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.backup-download:hover { color: var(--navy); }
+
 /* ── TOOLBAR ── */
 .toolbar {
   display: flex;
@@ -854,6 +925,11 @@ dialog::backdrop {
   .shell { width: calc(100% - 32px); padding-top: 20px; }
   .topbar { flex-direction: column; align-items: flex-start; }
   .topbar-actions { width: 100%; justify-content: space-between; }
+  .backup-head { display: grid; }
+  .backup-actions { justify-content: stretch; }
+  .backup-actions .btn-secondary { flex: 1; }
+  .backup-item { grid-template-columns: 1fr; }
+  .backup-meta { white-space: normal; }
   .toolbar { flex-direction: column; align-items: stretch; }
   .filters, .grid-2 { grid-template-columns: 1fr; }
   .board { grid-template-columns: 1fr; }
