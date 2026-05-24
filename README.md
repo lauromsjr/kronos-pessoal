@@ -207,6 +207,12 @@ O Kronos executa backup diário do SQLite às 03h e também permite backup manua
 
 São mantidos apenas os 7 backups mais recentes. A interface permite listar, gerar e baixar backups; restauração não é feita pelo app.
 
+### Visão Hoje
+
+A visão **Hoje** usa o campo `due_date` das tarefas para montar um painel diário de execução. Ela mostra tarefas atrasadas, para hoje, para amanhã, em andamento e de alta prioridade, com atalho para abrir a tarefa no modal.
+
+O painel pode ser recolhido pela interface e ajuda a separar o que precisa de atenção no dia sem misturar com a lista completa de tarefas.
+
 **Salvar e iniciar container.**
 
 ---

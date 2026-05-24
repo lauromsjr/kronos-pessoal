@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { getDb } from '../../database/sqlite';
-import { requireTaskAuth } from '../auth/auth';
+import { requireApiAuth } from '../auth/auth';
 
 const router = Router();
 
@@ -78,7 +78,7 @@ function csvEscape(value: unknown) {
   return `"${String(value).replaceAll('"', '""').replace(/\r?\n/g, '\n')}"`;
 }
 
-router.use(['/tasks', '/subtasks'], requireTaskAuth);
+router.use(['/tasks', '/subtasks'], requireApiAuth);
 
 async function applyStatusChange(taskId: number, nextStatus: string) {
   const db = await getDb();
@@ -124,6 +124,52 @@ async function getSubtaskCounts(db: Awaited<ReturnType<typeof getDb>>, taskIds: 
   const map: Record<number, { total: number; done: number }> = {};
   rows.forEach((r: any) => { map[r.task_id] = { total: r.total, done: r.done }; });
   return map;
+}
+
+async function attachSubtaskCounts(db: Awaited<ReturnType<typeof getDb>>, rows: any[]) {
+  const ids = rows.map((r: any) => r.id);
+  const counts = await getSubtaskCounts(db, ids);
+  return rows.map((r: any) => ({
+    ...r,
+    subtasks_total: counts[r.id]?.total || 0,
+    subtasks_done:  counts[r.id]?.done  || 0,
+  }));
+}
+
+function todayInSaoPaulo() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+function addDays(date: string, days: number) {
+  const next = new Date(`${date}T00:00:00-03:00`);
+  next.setUTCDate(next.getUTCDate() + days);
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(next);
+}
+
+async function getTodayBucket(
+  db: Awaited<ReturnType<typeof getDb>>,
+  where: string,
+  values: unknown[],
+  orderBy: string
+) {
+  const rows = await db.all(
+    `SELECT * FROM tasks
+     WHERE status != 'Concluída' AND ${where}
+     ORDER BY ${orderBy}`,
+    values
+  );
+
+  return attachSubtaskCounts(db, rows);
 }
 
 // ── GET /tasks ───────────────────────────────────────────────────────────────
@@ -197,13 +243,7 @@ router.get('/tasks', async (req, res, next) => {
     }
 
     // Attach subtask counts
-    const ids = rows.map((r: any) => r.id);
-    const counts = await getSubtaskCounts(db, ids);
-    const data = rows.map((r: any) => ({
-      ...r,
-      subtasks_total: counts[r.id]?.total || 0,
-      subtasks_done:  counts[r.id]?.done  || 0,
-    }));
+    const data = await attachSubtaskCounts(db, rows);
 
     if (isCompletedList) {
       return res.json({
@@ -218,6 +258,47 @@ router.get('/tasks', async (req, res, next) => {
     }
 
     res.json({ data });
+  } catch (err) { next(err); }
+});
+
+router.get('/tasks/today', async (_req, res, next) => {
+  try {
+    const db = await getDb();
+    const today = todayInSaoPaulo();
+    const tomorrow = addDays(today, 1);
+    const impactStatusOrder = `
+      CASE impact WHEN 'Alto' THEN 0 WHEN 'Médio' THEN 1 ELSE 2 END,
+      CASE status WHEN 'Em andamento' THEN 0 WHEN 'A fazer' THEN 1 WHEN 'Pausada' THEN 2 ELSE 3 END,
+      created_at ASC
+    `;
+    const dueFirstOrder = `
+      CASE WHEN due_date IS NULL THEN 1 ELSE 0 END,
+      due_date ASC,
+      created_at ASC
+    `;
+
+    const [overdue, todayTasks, tomorrowTasks, inProgress, highPriority] = await Promise.all([
+      getTodayBucket(db, 'due_date IS NOT NULL AND due_date < ?', [today], 'due_date ASC, created_at ASC'),
+      getTodayBucket(db, 'due_date = ?', [today], impactStatusOrder),
+      getTodayBucket(db, 'due_date = ?', [tomorrow], impactStatusOrder),
+      getTodayBucket(db, "status = 'Em andamento'", [], dueFirstOrder),
+      getTodayBucket(db, "impact = 'Alto'", [], dueFirstOrder),
+    ]);
+
+    res.json({
+      overdue,
+      today: todayTasks,
+      tomorrow: tomorrowTasks,
+      in_progress: inProgress,
+      high_priority: highPriority,
+      summary: {
+        overdue: overdue.length,
+        today: todayTasks.length,
+        tomorrow: tomorrowTasks.length,
+        in_progress: inProgress.length,
+        high_priority: highPriority.length,
+      },
+    });
   } catch (err) { next(err); }
 });
 
