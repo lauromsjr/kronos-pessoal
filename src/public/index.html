@@ -41,127 +41,156 @@
         </div>
       </header>
 
-      <!-- MÉTRICAS -->
-      <section class="metrics" id="metricsBar" aria-label="Resumo">
-        <div class="metric-card" data-list="Tarefa" id="metricTarefa">
-          <span class="metric-label">Tarefas</span>
-          <span class="metric-count" id="countTarefa">—</span>
-          <span class="metric-sub" id="subTarefa">carregando</span>
-        </div>
-        <div class="metric-card" data-list="Backlog" id="metricBacklog">
-          <span class="metric-label">Backlog</span>
-          <span class="metric-count" id="countBacklog">—</span>
-          <span class="metric-sub" id="subBacklog">itens aguardando</span>
-        </div>
-        <div class="metric-card" data-list="Ideia" id="metricIdeia">
-          <span class="metric-label">Ideias</span>
-          <span class="metric-count" id="countIdeia">—</span>
-          <span class="metric-sub" id="subIdeia">capturadas</span>
-        </div>
-        <div class="metric-card metric-progress">
-          <span class="metric-label">Progresso</span>
-          <div class="progress-ring-wrap">
-            <svg class="progress-ring" viewBox="0 0 64 64">
-              <circle class="ring-bg" cx="32" cy="32" r="26"/>
-              <circle class="ring-fill" id="progressRing" cx="32" cy="32" r="26"/>
-            </svg>
-            <span class="ring-pct" id="progressPct">0%</span>
+      <nav class="app-nav" aria-label="Navegação principal">
+        <button class="app-nav-btn active" data-view="execution" type="button">Execução</button>
+        <button class="app-nav-btn" data-view="settings" type="button">Configurações</button>
+      </nav>
+
+      <section id="executionView" class="app-section">
+        <!-- MÉTRICAS -->
+        <section class="metrics" id="metricsBar" aria-label="Resumo">
+          <div class="metric-card" data-list="Tarefa" id="metricTarefa">
+            <span class="metric-label">Tarefas</span>
+            <span class="metric-count" id="countTarefa">—</span>
+            <span class="metric-sub" id="subTarefa">carregando</span>
           </div>
-          <span class="metric-sub" id="progressSub">concluídas</span>
-          <div class="metric-extra" id="metricExtra"></div>
-        </div>
-      </section>
-
-      <!-- DISTRIBUIÇÃO -->
-      <section class="status-summary" id="statusSummary" aria-label="Resumo por status">
-        Em andamento (0) · A fazer (0) · Pausada (0)
-      </section>
-      <section class="dist-bar" id="distBar" aria-label="Distribuição por empresa"></section>
-
-      <!-- HOJE -->
-      <section class="today-panel" id="todayPanel" aria-label="Visão Hoje">
-        <div class="today-head">
-          <div>
-            <h2>Hoje</h2>
-            <p id="todaySummary">Atrasadas (0) · Hoje (0) · Amanhã (0) · Em andamento (0) · Alta prioridade (0)</p>
+          <div class="metric-card" data-list="Backlog" id="metricBacklog">
+            <span class="metric-label">Backlog</span>
+            <span class="metric-count" id="countBacklog">—</span>
+            <span class="metric-sub" id="subBacklog">itens aguardando</span>
           </div>
-          <button class="btn-secondary today-toggle" id="todayToggleBtn" type="button">Recolher</button>
-        </div>
-        <div class="today-grid" id="todayGrid"></div>
-      </section>
-
-      <!-- BACKUPS -->
-      <section class="backup-panel" aria-label="Backups SQLite">
-        <div class="backup-head">
-          <div>
-            <span class="metric-label">Backups SQLite</span>
-            <p id="backupMessage" class="backup-message">Carregando backups...</p>
+          <div class="metric-card" data-list="Ideia" id="metricIdeia">
+            <span class="metric-label">Ideias</span>
+            <span class="metric-count" id="countIdeia">—</span>
+            <span class="metric-sub" id="subIdeia">capturadas</span>
           </div>
-          <div class="backup-actions">
-            <button class="btn-secondary" id="refreshBackupsBtn" type="button">Atualizar backups</button>
-            <button class="btn-secondary" id="runBackupBtn" type="button">Backup agora</button>
+          <div class="metric-card metric-progress">
+            <span class="metric-label">Progresso</span>
+            <div class="progress-ring-wrap">
+              <svg class="progress-ring" viewBox="0 0 64 64">
+                <circle class="ring-bg" cx="32" cy="32" r="26"/>
+                <circle class="ring-fill" id="progressRing" cx="32" cy="32" r="26"/>
+              </svg>
+              <span class="ring-pct" id="progressPct">0%</span>
+            </div>
+            <span class="metric-sub" id="progressSub">concluídas</span>
+            <div class="metric-extra" id="metricExtra"></div>
           </div>
+        </section>
+
+        <!-- DISTRIBUIÇÃO -->
+        <section class="status-summary" id="statusSummary" aria-label="Resumo por status">
+          Em andamento (0) · A fazer (0) · Pausada (0)
+        </section>
+        <section class="dist-bar" id="distBar" aria-label="Distribuição por empresa"></section>
+
+        <!-- HOJE -->
+        <section class="today-panel" id="todayPanel" aria-label="Visão Hoje">
+          <div class="today-head">
+            <div>
+              <h2>Hoje</h2>
+              <p id="todaySummary">Atrasadas (0) · Hoje (0) · Amanhã (0) · Em andamento (0) · Alta prioridade (0)</p>
+            </div>
+            <button class="btn-secondary today-toggle" id="todayToggleBtn" type="button">Recolher</button>
+          </div>
+          <div class="today-grid" id="todayGrid"></div>
+        </section>
+
+        <!-- TOOLBAR -->
+        <section class="toolbar" aria-label="Filtros">
+          <nav class="tabs" aria-label="Listas">
+            <button class="tab active" data-list="Tarefa" type="button">
+              Tarefas <span class="tab-badge" id="tabBadgeTarefa"></span>
+            </button>
+            <button class="tab" data-list="Backlog" type="button">
+              Backlog <span class="tab-badge" id="tabBadgeBacklog"></span>
+            </button>
+            <button class="tab" data-list="Ideia" type="button">
+              Ideias <span class="tab-badge" id="tabBadgeIdeia"></span>
+            </button>
+            <button class="tab tab-concluidas" data-list="Concluida" type="button">
+              ✓ Concluídas <span class="tab-badge" id="tabBadgeConcluida"></span>
+            </button>
+          </nav>
+
+          <div class="filters" id="mainFilters">
+            <label>
+              Busca
+              <input id="searchInput" placeholder="Buscar tarefa..." />
+            </label>
+            <label>
+              Empresa
+              <select id="companyFilter">
+                <option value="">Todas</option>
+                <option>IbogaLiv</option>
+                <option>Olympus</option>
+                <option>PlugAI</option>
+                <option>Pessoal</option>
+              </select>
+            </label>
+            <label>
+              Impacto
+              <select id="impactFilter">
+                <option value="">Todos</option>
+                <option>Alto</option>
+                <option>Médio</option>
+                <option>Baixo</option>
+              </select>
+            </label>
+            <button class="btn-secondary" id="exportCsvBtn" type="button">Exportar CSV</button>
+          </div>
+        </section>
+
+        <!-- LEGENDA -->
+        <div class="urgency-legend" id="urgencyLegend">
+          <span><i class="dot dot-fresh"></i> Recente (&lt;3d)</span>
+          <span><i class="dot dot-warn"></i> Atenção (3–7d)</span>
+          <span><i class="dot dot-old"></i> Urgente (&gt;7d)</span>
         </div>
-        <div class="backup-list" id="backupList"></div>
+
+        <!-- BOARD -->
+        <section class="board" id="taskBoard" aria-live="polite"></section>
+        <div class="load-more-wrap">
+          <button class="btn-secondary" id="loadMoreBtn" type="button" hidden>Carregar mais</button>
+        </div>
       </section>
 
-      <!-- TOOLBAR -->
-      <section class="toolbar" aria-label="Filtros">
-        <nav class="tabs" aria-label="Listas">
-          <button class="tab active" data-list="Tarefa" type="button">
-            Tarefas <span class="tab-badge" id="tabBadgeTarefa"></span>
-          </button>
-          <button class="tab" data-list="Backlog" type="button">
-            Backlog <span class="tab-badge" id="tabBadgeBacklog"></span>
-          </button>
-          <button class="tab" data-list="Ideia" type="button">
-            Ideias <span class="tab-badge" id="tabBadgeIdeia"></span>
-          </button>
-          <button class="tab tab-concluidas" data-list="Concluida" type="button">
-            ✓ Concluídas <span class="tab-badge" id="tabBadgeConcluida"></span>
-          </button>
-        </nav>
+      <section id="settingsView" class="app-section settings-view" hidden>
+        <section class="backup-panel" aria-label="Backups SQLite">
+          <div class="backup-head">
+            <div>
+              <span class="metric-label">Backups SQLite</span>
+              <p id="backupMessage" class="backup-message">Abra Configurações para carregar backups.</p>
+            </div>
+            <div class="backup-actions">
+              <button class="btn-secondary" id="refreshBackupsBtn" type="button">Atualizar backups</button>
+              <button class="btn-secondary" id="runBackupBtn" type="button">Backup agora</button>
+            </div>
+          </div>
+          <div class="backup-list" id="backupList"></div>
+        </section>
 
-        <div class="filters" id="mainFilters">
-          <label>
-            Busca
-            <input id="searchInput" placeholder="Buscar tarefa..." />
-          </label>
-          <label>
-            Empresa
-            <select id="companyFilter">
-              <option value="">Todas</option>
-              <option>IbogaLiv</option>
-              <option>Olympus</option>
-              <option>PlugAI</option>
-              <option>Pessoal</option>
-            </select>
-          </label>
-          <label>
-            Impacto
-            <select id="impactFilter">
-              <option value="">Todos</option>
-              <option>Alto</option>
-              <option>Médio</option>
-              <option>Baixo</option>
-            </select>
-          </label>
-          <button class="btn-secondary" id="exportCsvBtn" type="button">Exportar CSV</button>
-        </div>
+        <section class="settings-card">
+          <span class="metric-label">Segurança</span>
+          <h2>Proteção ativa</h2>
+          <ul class="settings-list">
+            <li>Login web ativo</li>
+            <li>Sessão persistente por cookie seguro</li>
+            <li>API técnica via X-Api-Key ativa para automações</li>
+          </ul>
+        </section>
+
+        <section class="settings-card">
+          <span class="metric-label">Integrações futuras</span>
+          <h2>Próximos módulos</h2>
+          <ul class="settings-list">
+            <li>Google Agenda</li>
+            <li>Resumo diário</li>
+            <li>WhatsApp pessoal</li>
+            <li>Restauração de backup</li>
+          </ul>
+        </section>
       </section>
-
-      <!-- LEGENDA -->
-      <div class="urgency-legend" id="urgencyLegend">
-        <span><i class="dot dot-fresh"></i> Recente (&lt;3d)</span>
-        <span><i class="dot dot-warn"></i> Atenção (3–7d)</span>
-        <span><i class="dot dot-old"></i> Urgente (&gt;7d)</span>
-      </div>
-
-      <!-- BOARD -->
-      <section class="board" id="taskBoard" aria-live="polite"></section>
-      <div class="load-more-wrap">
-        <button class="btn-secondary" id="loadMoreBtn" type="button" hidden>Carregar mais</button>
-      </div>
 
     </main>
 
