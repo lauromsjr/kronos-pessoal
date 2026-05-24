@@ -43,6 +43,8 @@ const fields = {
   notes:   document.querySelector('#notesInput'),
 };
 
+let activeDragTaskId = null;
+
 // ============================================
 // UTILS
 // ============================================
@@ -625,6 +627,7 @@ function renderKanbanCard(task, index) {
 
   return `
     <article class="task kanban-card" data-impact="${task.impact}" draggable="true" data-task-id="${task.id}">
+      <span class="kanban-drag-handle" aria-hidden="true" title="Arrastar">⋮⋮</span>
       <span class="priority-num">${index + 1}</span>
       <div class="task-meta">
         <span class="badge ${badgeClass}">${company}</span>
@@ -640,11 +643,11 @@ function renderKanbanCard(task, index) {
       ${dueHtml}
       ${progressHtml}
       <div class="task-footer">
-        <select aria-label="Status" data-status-id="${task.id}">
+        <select aria-label="Status" data-status-id="${task.id}" draggable="false">
           ${['A fazer','Em andamento','Concluída','Pausada']
             .map(s => `<option ${s === task.status ? 'selected' : ''}>${s}</option>`).join('')}
         </select>
-        <button class="btn-edit" type="button" data-open-id="${task.id}">Abrir</button>
+        <button class="btn-edit" type="button" data-open-id="${task.id}" draggable="false">Abrir</button>
         ${elapsed ? `<span class="elapsed">⏱ ${elapsed}</span>` : ''}
       </div>
     </article>
@@ -694,45 +697,70 @@ function renderKanban() {
 }
 
 function setupDragAndDrop() {
-  const cards = board.querySelectorAll('.kanban-card');
-  const lists = board.querySelectorAll('.kanban-list');
+  if (board.dataset.dragReady === 'true') return;
+  board.dataset.dragReady = 'true';
 
-  cards.forEach(card => {
-    card.addEventListener('dragstart', (e) => {
-      card.classList.add('dragging');
-      e.dataTransfer.setData('text/plain', card.dataset.taskId);
-      e.dataTransfer.effectAllowed = 'move';
-    });
+  board.addEventListener('dragstart', (e) => {
+    const card = e.target.closest?.('.kanban-card');
+    if (!card) return;
 
-    card.addEventListener('dragend', () => {
-      card.classList.remove('dragging');
-    });
+    if (e.target.closest('button, select, input, textarea, a')) {
+      e.preventDefault();
+      return;
+    }
+
+    const taskId = card.dataset.taskId;
+    if (!taskId || !e.dataTransfer) {
+      e.preventDefault();
+      return;
+    }
+
+    activeDragTaskId = taskId;
+    card.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', taskId);
   });
 
-  lists.forEach(list => {
-    list.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      list.classList.add('drag-over');
-    });
+  board.addEventListener('dragend', () => {
+    board.querySelectorAll('.kanban-card.dragging').forEach(card => card.classList.remove('dragging'));
+    board.querySelectorAll('.kanban-list.drag-over').forEach(list => list.classList.remove('drag-over'));
+    activeDragTaskId = null;
+  });
 
-    list.addEventListener('dragenter', (e) => {
-      e.preventDefault();
-    });
+  board.addEventListener('dragover', (e) => {
+    const list = e.target.closest?.('.kanban-list');
+    if (!list) return;
 
-    list.addEventListener('dragleave', () => {
-      list.classList.remove('drag-over');
-    });
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    list.classList.add('drag-over');
+  });
 
-    list.addEventListener('drop', async (e) => {
-      e.preventDefault();
-      list.classList.remove('drag-over');
-      const taskId = e.dataTransfer.getData('text/plain');
-      const nextStatus = list.dataset.status;
-      if (taskId && nextStatus) {
-        await updateTaskStatusFromKanban(Number(taskId), nextStatus);
-      }
-    });
+  board.addEventListener('dragleave', (e) => {
+    const list = e.target.closest?.('.kanban-list');
+    if (!list) return;
+    if (e.relatedTarget instanceof Node && list.contains(e.relatedTarget)) return;
+    list.classList.remove('drag-over');
+  });
+
+  board.addEventListener('drop', async (e) => {
+    const list = e.target.closest?.('.kanban-list');
+    if (!list) return;
+
+    e.preventDefault();
+    list.classList.remove('drag-over');
+
+    const taskId = e.dataTransfer?.getData('text/plain') || activeDragTaskId;
+    const nextStatus = list.dataset.status;
+    const currentCard = taskId ? board.querySelector(`.kanban-card[data-task-id="${taskId}"]`) : null;
+    const currentStatus = currentCard?.closest('.kanban-list')?.dataset.status;
+
+    if (!taskId || !nextStatus || nextStatus === currentStatus) {
+      activeDragTaskId = null;
+      return;
+    }
+
+    await updateTaskStatusFromKanban(Number(taskId), nextStatus);
   });
 }
 

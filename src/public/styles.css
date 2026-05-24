@@ -1204,6 +1204,7 @@ dialog::backdrop {
 .kanban-card {
   cursor: grab;
   user-select: none;
+  padding-top: 26px;
 }
 
 .kanban-card:active {
@@ -1213,6 +1214,30 @@ dialog::backdrop {
 .kanban-card.dragging {
   opacity: 0.45;
   border: 1px dashed var(--navy);
+}
+
+.kanban-drag-handle {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  color: var(--muted);
+  cursor: grab;
+  font-family: var(--font-title);
+  font-size: 0.9rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1;
+  opacity: 0.72;
+  user-select: none;
+}
+
+.kanban-card:hover .kanban-drag-handle {
+  color: var(--navy);
+  opacity: 1;
+}
+
+.kanban-card.dragging .kanban-drag-handle {
+  cursor: grabbing;
 }
 
 /* In desktop view mode, the status selector on kanban-card is hidden */
