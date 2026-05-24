@@ -165,8 +165,31 @@ function getRangeBounds(range: CalendarRange) {
 }
 
 function detectCompany(title: string) {
-  const match = title.match(/^\[(Olympus|IbogaLiv|PlugAI|Pessoal)\]/);
-  return match ? match[1] as Company : null;
+  const prefix = title.match(/^\[(Olympus|IbogaLiv|PlugAI|Pessoal)\]/i);
+  if (prefix) {
+    const company = COMPANIES.find((item) => item.toLowerCase() === prefix[1].toLowerCase());
+    return company || null;
+  }
+
+  const normalized = title
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  const rules: Array<[Company, Array<string | RegExp>]> = [
+    ['IbogaLiv', ['liv terapias', 'iboga', 'ibogaliv', /\bliv\b/]],
+    ['Olympus', ['olympus', 'imovel', 'apartamento', 'visita']],
+    ['PlugAI', ['plugai', 'automacao', 'site', 'codex', /\bia\b/]],
+    ['Pessoal', ['pessoal', 'medico', 'consulta', 'familia']],
+  ];
+
+  for (const [company, keywords] of rules) {
+    if (keywords.some((keyword) => typeof keyword === 'string' ? normalized.includes(keyword) : keyword.test(normalized))) {
+      return company;
+    }
+  }
+
+  return null;
 }
 
 function normalizeEvent(event: calendar_v3.Schema$Event): CalendarEvent | null {

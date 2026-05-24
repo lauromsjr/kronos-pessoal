@@ -235,11 +235,27 @@ function formatDateTime(dateStr) {
   return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-function formatEventTime(event) {
-  if (event.all_day) return 'Dia inteiro';
+function formatEventTimeRange(event) {
+  if (event.all_day) return { time: 'Dia inteiro', duration: '' };
+
   const start = parseDate(event.start);
-  if (!start) return '';
-  return start.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const end = parseDate(event.end);
+  if (!start) return { time: '', duration: '' };
+
+  const startText = start.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  if (!end || end <= start) return { time: startText, duration: '' };
+
+  const endText = end.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const minutes = Math.round((end.getTime() - start.getTime()) / 60000);
+  const duration = minutes < 60
+    ? `${minutes}min`
+    : `${Math.floor(minutes / 60)}h${minutes % 60 ? ` ${minutes % 60}min` : ''}`;
+
+  return { time: `${startText}-${endText}`, duration };
+}
+
+function cleanCalendarTitle(title) {
+  return String(title || 'Sem título').replace(/^\[(Olympus|IbogaLiv|PlugAI|Pessoal)\]\s*/i, '');
 }
 
 function formatBytes(bytes) {
@@ -367,14 +383,21 @@ function renderTodaySection(title, tasks, extraClass = '') {
 }
 
 function renderCalendarEvent(event) {
-  const company = event.company ? `<span class="badge ${companyClass(event.company)}">${event.company}</span>` : '';
+  const company = event.company || null;
+  const companyBadge = company ? `<span class="badge ${companyClass(company)}">${company}</span>` : '';
   const location = event.location ? `<span class="calendar-location">${escapeHtml(event.location)}</span>` : '';
+  const { time, duration } = formatEventTimeRange(event);
+  const durationHtml = duration ? `<span class="calendar-duration">${duration}</span>` : '';
   return `
-    <article class="today-task calendar-event">
-      <div class="calendar-time">${formatEventTime(event)}</div>
-      <h3>${escapeHtml(event.title)}</h3>
+    <article class="today-task calendar-event ${companyClass(company)}">
+      <div class="calendar-event-header">
+        <span class="calendar-time">${time}</span>
+        ${durationHtml}
+      </div>
+      <h3 class="calendar-event-title">${escapeHtml(cleanCalendarTitle(event.title))}</h3>
       <div class="today-meta">
-        ${company}
+        ${companyBadge}
+        <span class="calendar-source">Agenda</span>
         ${location}
       </div>
     </article>
@@ -383,7 +406,11 @@ function renderCalendarEvent(event) {
 
 function renderCalendarSection(title, events) {
   const connected = state.calendarStatus?.connected || events.length > 0;
-  const emptyText = connected ? 'Nada aqui.' : 'Agenda não conectada.';
+  const emptyText = !connected
+    ? 'Agenda não conectada.'
+    : title === 'Agenda hoje'
+      ? 'Nenhum compromisso hoje.'
+      : 'Nenhum compromisso amanhã.';
   return `
     <section class="today-section today-calendar">
       <h3>${title}</h3>
@@ -397,8 +424,10 @@ function renderCalendarSection(title, events) {
 function renderToday() {
   if (!state.today) return;
   const summary = state.today.summary;
+  const calendarTodayCount = state.calendarEvents.today.length;
+  const calendarTomorrowCount = state.calendarEvents.tomorrow.length;
   document.querySelector('#todaySummary').textContent =
-    `Atrasadas (${summary.overdue}) · Hoje (${summary.today}) · Amanhã (${summary.tomorrow}) · Em andamento (${summary.in_progress}) · Alta prioridade (${summary.high_priority})`;
+    `Atrasadas (${summary.overdue}) · Hoje (${summary.today}) · Amanhã (${summary.tomorrow}) · Em andamento (${summary.in_progress}) · Alta prioridade (${summary.high_priority}) · Agenda hoje (${calendarTodayCount}) · Agenda amanhã (${calendarTomorrowCount})`;
 
   document.querySelector('#todayGrid').innerHTML = [
     renderTodaySection('Atrasadas', state.today.overdue, 'today-overdue'),
