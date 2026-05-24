@@ -13,6 +13,8 @@ const state = {
   tasks:     [],
   allTasks:  [],
   stats:     null,
+  today:      null,
+  todayCollapsed: localStorage.getItem('Kronos_TODAY_COLLAPSED') === 'true',
   backups:   [],
   subtasks:  {}, // taskId → []
   completedPage: 1,
@@ -237,6 +239,14 @@ function dueDateText(dueDate) {
   return `${label}: ${formatDate(dueDate)}`;
 }
 
+function taskCompanyBadge(task) {
+  return `<span class="badge ${companyClass(task.company)}">${companyLabel(task.company)}</span>`;
+}
+
+function taskImpactChip(task) {
+  return `<span class="chip ${impactChipClass(task.impact)}">${task.impact}</span>`;
+}
+
 function impactChipClass(impact) {
   if (impact === 'Alto')  return 'chip-impact-alto';
   if (impact === 'Médio') return 'chip-impact-medio';
@@ -285,6 +295,62 @@ async function loadStats() {
         <span class="dist-num">${count}</span>
       </div>
     `).join('');
+}
+
+function setTodayCollapsed(collapsed) {
+  state.todayCollapsed = collapsed;
+  localStorage.setItem('Kronos_TODAY_COLLAPSED', collapsed ? 'true' : 'false');
+  document.querySelector('#todayPanel').classList.toggle('collapsed', collapsed);
+  document.querySelector('#todayToggleBtn').textContent = collapsed ? 'Expandir' : 'Recolher';
+}
+
+function renderTodayItem(task) {
+  const due = task.due_date ? `<span class="today-due ${dueDateClass(task.due_date)}">${dueDateText(task.due_date)}</span>` : '';
+  return `
+    <article class="today-task">
+      <h3>${escapeHtml(task.title)}</h3>
+      <div class="today-meta">
+        ${taskCompanyBadge(task)}
+        ${taskImpactChip(task)}
+        <span class="chip">${task.status}</span>
+        ${due}
+      </div>
+      <button class="btn-edit" type="button" data-open-id="${task.id}">Abrir</button>
+    </article>
+  `;
+}
+
+function renderTodaySection(title, tasks, extraClass = '') {
+  return `
+    <section class="today-section ${extraClass}">
+      <h3>${title}</h3>
+      <div class="today-section-list">
+        ${tasks.length ? tasks.map(renderTodayItem).join('') : '<p class="today-empty">Nada aqui.</p>'}
+      </div>
+    </section>
+  `;
+}
+
+function renderToday() {
+  if (!state.today) return;
+  const summary = state.today.summary;
+  document.querySelector('#todaySummary').textContent =
+    `Atrasadas (${summary.overdue}) · Hoje (${summary.today}) · Amanhã (${summary.tomorrow}) · Em andamento (${summary.in_progress}) · Alta prioridade (${summary.high_priority})`;
+
+  document.querySelector('#todayGrid').innerHTML = [
+    renderTodaySection('Atrasadas', state.today.overdue, 'today-overdue'),
+    renderTodaySection('Para hoje', state.today.today),
+    renderTodaySection('Amanhã', state.today.tomorrow),
+    renderTodaySection('Em andamento', state.today.in_progress),
+    renderTodaySection('Alta prioridade', state.today.high_priority),
+  ].join('');
+
+  setTodayCollapsed(state.todayCollapsed);
+}
+
+async function loadToday() {
+  state.today = await api('/api/tasks/today');
+  renderToday();
 }
 
 function setBackupMessage(message, type = '') {
@@ -507,6 +573,7 @@ async function loadTasks() {
   state.completedHasMore = Boolean(result.pagination?.has_more);
   await loadAllTasks();
   await loadStats();
+  await loadToday();
   await loadBackups();
   updateMetrics();
   render();
@@ -767,6 +834,10 @@ document.querySelector('#runBackupBtn').addEventListener('click', async () => {
   await runManualBackup();
 });
 
+document.querySelector('#todayToggleBtn').addEventListener('click', () => {
+  setTodayCollapsed(!state.todayCollapsed);
+});
+
 loginForm.addEventListener('submit', submitLogin);
 document.querySelector('#logoutBtn').addEventListener('click', logout);
 
@@ -781,6 +852,12 @@ board.addEventListener('change', async (e) => {
 });
 
 board.addEventListener('click', async (e) => {
+  const id = e.target.dataset.openId;
+  if (!id) return;
+  await openTask(Number(id));
+});
+
+document.querySelector('#todayGrid').addEventListener('click', async (e) => {
   const id = e.target.dataset.openId;
   if (!id) return;
   await openTask(Number(id));

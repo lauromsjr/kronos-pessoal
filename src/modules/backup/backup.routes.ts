@@ -1,12 +1,12 @@
 import path from 'path';
 import { Router } from 'express';
 import { getSqliteBackupPath, listSqliteBackups, runSqliteBackup } from '../cron/backup';
-import { requireTaskAuth } from '../auth/auth';
+import { requireApiAuth } from '../auth/auth';
 
 const router = Router();
 const BACKUP_PATTERN = /^kronos_backup_\d{4}-\d{2}-\d{2}\.sqlite$/;
 
-router.use('/backups', requireTaskAuth);
+router.use('/backups', requireApiAuth);
 
 router.get('/backups', async (_req, res, next) => {
   try {

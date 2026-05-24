@@ -272,6 +272,119 @@ h2, h3 { font-family: var(--font-title); }
 .dist-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .dist-num { font-family: var(--font-title); font-weight: 700; color: var(--navy); }
 
+/* ── HOJE ── */
+.today-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 16px;
+  margin-bottom: 18px;
+}
+
+.today-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.today-head h2 {
+  color: var(--navy);
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.today-head p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.today-toggle {
+  min-height: 34px;
+  padding: 7px 12px;
+}
+
+.today-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.today-panel.collapsed .today-grid { display: none; }
+
+.today-section {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  border-top: 2px solid var(--panel-3);
+  padding-top: 9px;
+}
+
+.today-section.today-overdue { border-top-color: rgba(220,38,38,0.35); }
+
+.today-section > h3 {
+  color: var(--navy);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.today-section-list {
+  display: grid;
+  gap: 7px;
+}
+
+.today-task {
+  display: grid;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  padding: 10px;
+}
+
+.today-overdue .today-task {
+  background: #FFF7F7;
+  border-color: rgba(220,38,38,0.18);
+}
+
+.today-task h3 {
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.today-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.today-due {
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 0.67rem;
+  font-weight: 800;
+}
+
+.today-due.today { color: var(--warn); background: #FFFBEB; }
+.today-due.overdue { color: var(--old); background: #FEF2F2; }
+
+.today-empty {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 9px 0;
+}
+
 /* ── BACKUPS ── */
 .backup-panel {
   display: grid;
@@ -919,12 +1032,15 @@ dialog::backdrop {
 /* ── RESPONSIVE ── */
 @media (max-width: 900px) {
   .metrics { grid-template-columns: repeat(2, 1fr); }
+  .today-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 640px) {
   .shell { width: calc(100% - 32px); padding-top: 20px; }
   .topbar { flex-direction: column; align-items: flex-start; }
   .topbar-actions { width: 100%; justify-content: space-between; }
+  .today-head { display: grid; }
+  .today-grid { grid-template-columns: 1fr; }
   .backup-head { display: grid; }
   .backup-actions { justify-content: stretch; }
   .backup-actions .btn-secondary { flex: 1; }

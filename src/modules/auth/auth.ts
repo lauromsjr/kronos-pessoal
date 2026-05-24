@@ -139,7 +139,7 @@ export function validateLogin(username: string, password: string) {
   return verifyPassword(password, getPasswordHash());
 }
 
-export function requireTaskAuth(req: Request, res: Response, next: NextFunction) {
+export function requireApiAuth(req: Request, res: Response, next: NextFunction) {
   if (getSessionUser(req)) return next();
 
   const expectedApiKey = process.env.KRONOS_API_KEY;
