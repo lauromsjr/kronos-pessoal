@@ -4,7 +4,7 @@ import path from 'path';
 import { Credentials, OAuth2Client } from 'google-auth-library';
 import { calendar_v3, google } from 'googleapis';
 
-const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events.readonly';
+const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
 const DEFAULT_TOKEN_PATH = '/app/data/google_calendar_token.json';
 const COMPANIES = ['Olympus', 'IbogaLiv', 'PlugAI', 'Pessoal'] as const;
 
@@ -20,6 +20,21 @@ export type CalendarEvent = {
   location?: string;
   source: 'google_calendar';
   company?: Company | null;
+};
+
+export type CalendarSyncTask = {
+  id: number;
+  title: string;
+  company?: Company | null;
+  impact?: string | null;
+  list_type?: string | null;
+  status?: string | null;
+  due_date?: string | null;
+  notes?: string | null;
+  sync_to_calendar?: number | boolean | null;
+  google_event_id?: string | null;
+  calendar_start_time?: string | null;
+  calendar_duration_min?: number | null;
 };
 
 function getCalendarId() {
@@ -121,6 +136,16 @@ export function getCalendarStatus() {
   };
 }
 
+export async function disconnectGoogleCalendar() {
+  try {
+    await fs.promises.unlink(getTokenPath());
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
+
+  return { ok: true, connected: false };
+}
+
 export function getOAuthStartUrl() {
   const client = getOAuthClient();
   return client.generateAuthUrl({
@@ -190,6 +215,96 @@ function detectCompany(title: string) {
   }
 
   return null;
+}
+
+export function getCompanyPrefix(company?: string | null) {
+  if (!company || !COMPANIES.includes(company as Company)) return '';
+  return `[${company}] `;
+}
+
+function parseTaskStart(task: CalendarSyncTask) {
+  if (!task.due_date) return null;
+
+  const startTime = task.calendar_start_time || '09:00';
+  const duration = task.calendar_duration_min || 60;
+  const start = new Date(`${task.due_date}T${startTime}:00-03:00`);
+  if (Number.isNaN(start.getTime())) return null;
+
+  const end = new Date(start.getTime() + duration * 60000);
+  return {
+    start: `${task.due_date}T${startTime}:00-03:00`,
+    end: toSaoPauloDateTime(end),
+  };
+}
+
+function toSaoPauloDateTime(date: Date) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}:${values.second}-03:00`;
+}
+
+export function buildTaskCalendarEventPayload(task: CalendarSyncTask): calendar_v3.Schema$Event | null {
+  const range = parseTaskStart(task);
+  if (!range) return null;
+
+  const title = `${getCompanyPrefix(task.company)}${task.title}`;
+  const description = [
+    'Criado pelo Kronos.',
+    `Status: ${task.status || '-'}`,
+    `Impacto: ${task.impact || '-'}`,
+    `Lista: ${task.list_type || '-'}`,
+    `Notas: ${task.notes || '-'}`,
+  ].join('\n');
+
+  return {
+    summary: title,
+    description,
+    start: {
+      dateTime: range.start,
+      timeZone: 'America/Sao_Paulo',
+    },
+    end: {
+      dateTime: range.end,
+      timeZone: 'America/Sao_Paulo',
+    },
+  };
+}
+
+export async function upsertTaskCalendarEvent(task: CalendarSyncTask) {
+  if (!task.sync_to_calendar || !task.due_date) return null;
+
+  const auth = await getAuthorizedClient();
+  if (!auth) return null;
+
+  const eventPayload = buildTaskCalendarEventPayload(task);
+  if (!eventPayload) return null;
+
+  const calendar = google.calendar({ version: 'v3', auth: auth as OAuth2Client });
+  const calendarId = getCalendarId();
+
+  if (task.google_event_id) {
+    const updated = await calendar.events.update({
+      calendarId,
+      eventId: task.google_event_id,
+      requestBody: eventPayload,
+    });
+    return updated.data.id || task.google_event_id;
+  }
+
+  const created = await calendar.events.insert({
+    calendarId,
+    requestBody: eventPayload,
+  });
+  return created.data.id || null;
 }
 
 function normalizeEvent(event: calendar_v3.Schema$Event): CalendarEvent | null {

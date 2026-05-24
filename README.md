@@ -207,9 +207,9 @@ O Kronos executa backup diário do SQLite às 03h e também permite backup manua
 
 São mantidos apenas os 7 backups mais recentes. A interface permite listar, gerar e baixar backups; restauração não é feita pelo app.
 
-### Google Agenda somente leitura
+### Google Agenda
 
-O Kronos pode ler eventos da Google Agenda e exibir compromissos de hoje e amanhã dentro da visão **Hoje**. A integração usa OAuth Web Server Flow e o escopo `https://www.googleapis.com/auth/calendar.events.readonly`; ela não cria, edita nem exclui eventos.
+O Kronos pode ler eventos da Google Agenda, exibir compromissos de hoje e amanhã dentro da visão **Hoje** e criar/atualizar eventos de tarefas marcadas para sincronizar. A integração usa OAuth Web Server Flow e o escopo `https://www.googleapis.com/auth/calendar.events`.
 
 No Google Cloud, ative a Google Calendar API, crie um OAuth Client do tipo Web e configure a redirect URI:
 
@@ -228,6 +228,16 @@ GOOGLE_OAUTH_TOKEN_PATH=/app/data/google_calendar_token.json
 ```
 
 O token OAuth é salvo em `/app/data`, junto do SQLite, então o volume persistente precisa estar mapeado. Depois do deploy, conecte pela aba **Configurações** em "Google Agenda".
+
+Se você já conectou a agenda quando o escopo era somente leitura, reautorize a conta: vá em **Configurações > Google Agenda > Desconectar agenda** e depois clique em **Conectar Google Agenda**. Manualmente, também é possível remover `/app/data/google_calendar_token.json` ou o arquivo definido em `GOOGLE_OAUTH_TOKEN_PATH` e conectar novamente.
+
+Para salvar uma tarefa na agenda:
+
+1. Abra ou crie uma tarefa.
+2. Defina o prazo da tarefa principal.
+3. Marque **Adicionar à agenda**.
+4. Defina horário e duração.
+5. Salve a tarefa.
 
 Use prefixos no título do evento para identificar a frente: `[Olympus]`, `[IbogaLiv]`, `[PlugAI]` ou `[Pessoal]`.
 

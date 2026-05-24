@@ -4,6 +4,7 @@ import { requireApiAuth } from '../auth/auth';
 import {
   getCalendarStatus,
   getOAuthStartUrl,
+  disconnectGoogleCalendar,
   handleOAuthCallback,
   listCalendarEvents,
   verifyOAuthState,
@@ -18,6 +19,14 @@ router.get('/calendar/status', requireApiAuth, (_req, res) => {
 router.get('/calendar/oauth/start', requireApiAuth, (_req, res, next) => {
   try {
     res.json({ url: getOAuthStartUrl() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/calendar/disconnect', requireApiAuth, async (_req, res, next) => {
+  try {
+    res.json(await disconnectGoogleCalendar());
   } catch (err) {
     next(err);
   }

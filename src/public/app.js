@@ -42,6 +42,9 @@ const fields = {
   list:    document.querySelector('#listInput'),
   status:  document.querySelector('#statusInput'),
   dueDate: document.querySelector('#dueDateInput'),
+  syncCalendar: document.querySelector('#syncCalendarInput'),
+  calendarStartTime: document.querySelector('#calendarStartTimeInput'),
+  calendarDuration: document.querySelector('#calendarDurationInput'),
   notes:   document.querySelector('#notesInput'),
 };
 
@@ -452,19 +455,22 @@ function renderCalendarStatus() {
   const title = document.querySelector('#calendarStatusTitle');
   const text = document.querySelector('#calendarStatusText');
   const connectButton = document.querySelector('#connectCalendarBtn');
-  if (!title || !text || !connectButton) return;
+  const disconnectButton = document.querySelector('#disconnectCalendarBtn');
+  if (!title || !text || !connectButton || !disconnectButton) return;
 
   const status = state.calendarStatus;
   if (status?.connected) {
     title.textContent = 'Google Agenda conectada';
-    text.textContent = `Calendar ID: ${status.calendar_id || 'primary'}`;
+    text.textContent = `Calendar ID: ${status.calendar_id || 'primary'} · Lê eventos e cria/atualiza tarefas marcadas para sincronizar. Use desconectar para trocar permissões ou reconectar a conta Google.`;
     connectButton.hidden = true;
+    disconnectButton.hidden = false;
     return;
   }
 
   title.textContent = 'Agenda não conectada';
-  text.textContent = 'Google Agenda não conectada.';
+  text.textContent = 'Google Agenda não conectada. Conecte para ler eventos e sincronizar tarefas selecionadas.';
   connectButton.hidden = false;
+  disconnectButton.hidden = true;
 }
 
 async function loadCalendarStatus() {
@@ -479,6 +485,16 @@ async function loadCalendarStatus() {
 async function connectGoogleCalendar() {
   const result = await api('/api/calendar/oauth/start');
   if (result.url) window.location.href = result.url;
+}
+
+async function disconnectGoogleCalendar() {
+  if (!confirm('Desconectar a Google Agenda deste Kronos?')) return;
+  await api('/api/calendar/disconnect', { method: 'POST' });
+  state.calendarStatus = { connected: false, calendar_id: state.calendarStatus?.calendar_id || 'primary' };
+  state.calendarEvents = { today: [], tomorrow: [] };
+  renderCalendarStatus();
+  renderToday();
+  updateCalendarSyncFields();
 }
 
 async function loadCalendarEvents() {
@@ -499,6 +515,39 @@ async function loadCalendarEvents() {
   } catch (err) {
     state.calendarEvents = { today: [], tomorrow: [] };
   }
+}
+
+function updateCalendarSyncFields() {
+  const syncChecked = fields.syncCalendar.checked;
+  const connected = Boolean(state.calendarStatus?.connected);
+  const hasDueDate = Boolean(fields.dueDate.value);
+  const note = document.querySelector('#calendarSyncNote');
+  const controls = document.querySelector('#calendarSyncFields');
+
+  controls.classList.toggle('disabled', !syncChecked);
+  fields.calendarStartTime.disabled = !syncChecked;
+  fields.calendarDuration.disabled = !syncChecked;
+
+  if (!connected) {
+    note.textContent = 'Conecte a Google Agenda em Configurações para sincronizar esta tarefa.';
+    note.className = 'calendar-sync-note warn';
+    return;
+  }
+
+  if (syncChecked && !hasDueDate) {
+    note.textContent = 'Defina um prazo para salvar na agenda.';
+    note.className = 'calendar-sync-note warn';
+    return;
+  }
+
+  if (syncChecked) {
+    note.textContent = 'A tarefa será criada ou atualizada na Google Agenda ao salvar.';
+    note.className = 'calendar-sync-note success';
+    return;
+  }
+
+  note.textContent = 'Marque para criar ou atualizar um evento desta tarefa na Google Agenda.';
+  note.className = 'calendar-sync-note';
 }
 
 function setBackupMessage(message, type = '') {
@@ -1085,6 +1134,9 @@ function resetForm() {
   fields.list.value    = state.list === 'Concluida' ? 'Tarefa' : state.list;
   fields.status.value  = 'A fazer';
   fields.dueDate.value = '';
+  fields.syncCalendar.checked = false;
+  fields.calendarStartTime.value = '09:00';
+  fields.calendarDuration.value = '60';
   fields.notes.value   = '';
   document.querySelector('#modalTitle').textContent = 'Nova tarefa';
   document.querySelector('#taskDetail').hidden      = true;
@@ -1094,6 +1146,7 @@ function resetForm() {
   document.querySelector('#newSubtaskDueDateInput').value = '';
   currentSubtasks = [];
   currentTaskId   = null;
+  updateCalendarSyncFields();
 }
 
 async function openTask(id) {
@@ -1107,6 +1160,9 @@ async function openTask(id) {
   fields.list.value    = task.list_type;
   fields.status.value  = task.status;
   fields.dueDate.value = task.due_date || '';
+  fields.syncCalendar.checked = Boolean(task.sync_to_calendar);
+  fields.calendarStartTime.value = task.calendar_start_time || '09:00';
+  fields.calendarDuration.value = String(task.calendar_duration_min || 60);
   fields.notes.value   = task.notes || '';
 
   document.querySelector('#modalTitle').textContent = 'Editar tarefa';
@@ -1125,6 +1181,12 @@ async function openTask(id) {
   currentTaskId = task.id;
   currentSubtasks = task.subtasks || [];
   renderSubtaskList();
+  updateCalendarSyncFields();
+  if (task.google_event_id) {
+    const note = document.querySelector('#calendarSyncNote');
+    note.textContent = 'Sincronizada com Google Agenda.';
+    note.className = 'calendar-sync-note success';
+  }
 
   modal.showModal();
 }
@@ -1138,15 +1200,20 @@ async function saveTask(event) {
     list_type: fields.list.value,
     status:    fields.status.value,
     due_date:  fields.dueDate.value || null,
+    sync_to_calendar: fields.syncCalendar.checked,
+    calendar_start_time: fields.syncCalendar.checked ? fields.calendarStartTime.value || '09:00' : null,
+    calendar_duration_min: fields.syncCalendar.checked ? Number(fields.calendarDuration.value || 60) : null,
     notes:     fields.notes.value,
   };
 
   let taskId = fields.id.value;
 
   if (taskId) {
-    await api(`/api/tasks/${taskId}`, { method: 'PUT', body: JSON.stringify(payload) });
+    const result = await api(`/api/tasks/${taskId}`, { method: 'PUT', body: JSON.stringify(payload) });
+    if (result.calendar_sync_failed) alert('Tarefa salva, mas não foi possível sincronizar com a agenda.');
   } else {
     const result = await api('/api/tasks', { method: 'POST', body: JSON.stringify(payload) });
+    if (result.calendar_sync_failed) alert('Tarefa salva, mas não foi possível sincronizar com a agenda.');
     taskId = result.data.id;
     currentTaskId = taskId;
 
@@ -1248,6 +1315,10 @@ document.querySelector('#connectCalendarBtn').addEventListener('click', async ()
   await connectGoogleCalendar();
 });
 
+document.querySelector('#disconnectCalendarBtn').addEventListener('click', async () => {
+  await disconnectGoogleCalendar();
+});
+
 document.querySelectorAll('.app-nav-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
     await switchView(btn.dataset.view);
@@ -1268,6 +1339,9 @@ if (toggleEl) {
 
 loginForm.addEventListener('submit', submitLogin);
 document.querySelector('#logoutBtn').addEventListener('click', logout);
+
+fields.syncCalendar.addEventListener('change', updateCalendarSyncFields);
+fields.dueDate.addEventListener('change', updateCalendarSyncFields);
 
 board.addEventListener('change', async (e) => {
   const id = e.target.dataset.statusId;

@@ -65,4 +65,16 @@ export async function initTaskSchema(): Promise<void> {
   if (!columns.some((column) => column.name === 'due_date')) {
     await db.exec('ALTER TABLE tasks ADD COLUMN due_date DATE NULL;');
   }
+  if (!columns.some((column) => column.name === 'sync_to_calendar')) {
+    await db.exec('ALTER TABLE tasks ADD COLUMN sync_to_calendar INTEGER NOT NULL DEFAULT 0;');
+  }
+  if (!columns.some((column) => column.name === 'google_event_id')) {
+    await db.exec('ALTER TABLE tasks ADD COLUMN google_event_id TEXT NULL;');
+  }
+  if (!columns.some((column) => column.name === 'calendar_start_time')) {
+    await db.exec('ALTER TABLE tasks ADD COLUMN calendar_start_time TEXT NULL;');
+  }
+  if (!columns.some((column) => column.name === 'calendar_duration_min')) {
+    await db.exec('ALTER TABLE tasks ADD COLUMN calendar_duration_min INTEGER NULL;');
+  }
 }
