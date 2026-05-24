@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { getDb } from '../../database/sqlite';
 import { requireApiAuth } from '../auth/auth';
+import { upsertTaskCalendarEvent } from '../calendar/googleCalendar';
 
 const router = Router();
 
@@ -20,6 +21,16 @@ const nullableDueDate = z.preprocess(
   z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional()
 );
 
+const nullableCalendarStartTime = z.preprocess(
+  (value) => value === '' ? null : value,
+  z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional()
+);
+
+const nullableCalendarDuration = z.preprocess(
+  (value) => value === '' ? null : value,
+  z.number().int().min(15).max(480).nullable().optional()
+);
+
 const taskInput = z.object({
   title:     z.string().trim().min(1),
   company:   nullableCompany,
@@ -27,6 +38,9 @@ const taskInput = z.object({
   list_type: z.enum(listTypes).nullable().optional(),
   status:    z.enum(statuses).nullable().optional(),
   due_date:  nullableDueDate,
+  sync_to_calendar: z.boolean().optional(),
+  calendar_start_time: nullableCalendarStartTime,
+  calendar_duration_min: nullableCalendarDuration,
   notes:     z.string().nullable().optional(),
 });
 
@@ -76,6 +90,9 @@ function normalizeTask(input: z.infer<typeof taskInput>) {
     list_type: input.list_type || 'Tarefa',
     status:    input.status    || 'A fazer',
     due_date:  input.due_date ?? null,
+    sync_to_calendar: input.sync_to_calendar ? 1 : 0,
+    calendar_start_time: input.calendar_start_time ?? null,
+    calendar_duration_min: input.calendar_duration_min ?? null,
     notes:     input.notes     || '',
   };
 }
@@ -141,6 +158,23 @@ async function attachSubtaskCounts(db: Awaited<ReturnType<typeof getDb>>, rows: 
     subtasks_total: counts[r.id]?.total || 0,
     subtasks_done:  counts[r.id]?.done  || 0,
   }));
+}
+
+async function syncTaskCalendarEvent(db: Awaited<ReturnType<typeof getDb>>, task: any) {
+  try {
+    const googleEventId = await upsertTaskCalendarEvent(task);
+    if (googleEventId && googleEventId !== task.google_event_id) {
+      await db.run('UPDATE tasks SET google_event_id = ? WHERE id = ?', googleEventId, task.id);
+      return {
+        task: await db.get('SELECT * FROM tasks WHERE id = ?', task.id),
+        calendarSyncFailed: false,
+      };
+    }
+    return { task, calendarSyncFailed: false };
+  } catch (err) {
+    console.error('[calendar] task sync failed', err);
+    return { task, calendarSyncFailed: true };
+  }
 }
 
 function todayInSaoPaulo() {
@@ -407,8 +441,12 @@ router.post('/tasks', async (req, res, next) => {
     const db = await getDb();
 
     const result = await db.run(
-      `INSERT INTO tasks (title, company, impact, list_type, status, due_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      task.title, task.company, task.impact, task.list_type, task.status, task.due_date, task.notes
+      `INSERT INTO tasks (
+        title, company, impact, list_type, status, due_date,
+        sync_to_calendar, calendar_start_time, calendar_duration_min, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      task.title, task.company, task.impact, task.list_type, task.status, task.due_date,
+      task.sync_to_calendar, task.calendar_start_time, task.calendar_duration_min, task.notes
     );
 
     await db.run(
@@ -417,7 +455,8 @@ router.post('/tasks', async (req, res, next) => {
     );
 
     const created = await db.get('SELECT * FROM tasks WHERE id = ?', result.lastID);
-    res.status(201).json({ data: created });
+    const synced = await syncTaskCalendarEvent(db, created);
+    res.status(201).json({ data: synced.task, calendar_sync_failed: synced.calendarSyncFailed });
   } catch (err) { next(err); }
 });
 
@@ -431,14 +470,30 @@ router.put('/tasks/:id', async (req, res, next) => {
     const current = await db.get('SELECT * FROM tasks WHERE id = ?', id);
     if (!current) return res.status(404).json({ error: 'Task not found' });
 
-    const fields = ['title', 'company', 'impact', 'list_type', 'due_date', 'notes'] as const;
+    const fields = [
+      'title',
+      'company',
+      'impact',
+      'list_type',
+      'due_date',
+      'sync_to_calendar',
+      'calendar_start_time',
+      'calendar_duration_min',
+      'notes',
+    ] as const;
     const updates: string[] = [];
     const values: unknown[]  = [];
 
     for (const field of fields) {
       if (field in parsed) {
         updates.push(`${field} = ?`);
-        values.push(field === 'company' || field === 'due_date' ? parsed[field] ?? null : parsed[field] ?? '');
+        if (field === 'sync_to_calendar') {
+          values.push(parsed[field] ? 1 : 0);
+        } else if (field === 'company' || field === 'due_date' || field === 'calendar_start_time' || field === 'calendar_duration_min') {
+          values.push(parsed[field] ?? null);
+        } else {
+          values.push(parsed[field] ?? '');
+        }
       }
     }
 
@@ -448,11 +503,13 @@ router.put('/tasks/:id', async (req, res, next) => {
 
     if (parsed.status && parsed.status !== current.status) {
       const updatedWithStatus = await applyStatusChange(id, parsed.status);
-      return res.json({ data: updatedWithStatus });
+      const synced = await syncTaskCalendarEvent(db, updatedWithStatus);
+      return res.json({ data: synced.task, calendar_sync_failed: synced.calendarSyncFailed });
     }
 
     const updated = await db.get('SELECT * FROM tasks WHERE id = ?', id);
-    res.json({ data: updated });
+    const synced = await syncTaskCalendarEvent(db, updated);
+    res.json({ data: synced.task, calendar_sync_failed: synced.calendarSyncFailed });
   } catch (err) { next(err); }
 });
 
@@ -464,7 +521,9 @@ router.patch('/tasks/:id/status', async (req, res, next) => {
     const parsed = statusInput.parse(req.body);
     const updated = await applyStatusChange(id, parsed.status);
     if (!updated) return res.status(404).json({ error: 'Task not found' });
-    res.json({ data: updated });
+    const db = await getDb();
+    const synced = await syncTaskCalendarEvent(db, updated);
+    res.json({ data: synced.task, calendar_sync_failed: synced.calendarSyncFailed });
   } catch (err) { next(err); }
 });
 

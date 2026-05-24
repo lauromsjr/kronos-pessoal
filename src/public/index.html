@@ -182,6 +182,7 @@
           <div class="settings-actions">
             <button class="btn-secondary" id="refreshCalendarBtn" type="button">Atualizar status</button>
             <button class="btn-primary" id="connectCalendarBtn" type="button">Conectar Google Agenda</button>
+            <button class="btn-secondary" id="disconnectCalendarBtn" type="button" hidden>Desconectar agenda</button>
           </div>
         </section>
 
@@ -269,6 +270,33 @@
           Prazo
           <input id="dueDateInput" type="date" />
         </label>
+
+        <section class="calendar-sync-section">
+          <div class="calendar-sync-head">
+            <span class="detail-label">Google Agenda</span>
+            <label class="calendar-sync-toggle">
+              <input id="syncCalendarInput" type="checkbox" />
+              Adicionar à agenda
+            </label>
+          </div>
+          <p class="calendar-sync-note" id="calendarSyncNote">Conecte a Google Agenda em Configurações para sincronizar esta tarefa.</p>
+          <div class="calendar-sync-fields" id="calendarSyncFields">
+            <label>
+              Horário
+              <input id="calendarStartTimeInput" type="time" value="09:00" />
+            </label>
+            <label>
+              Duração
+              <select id="calendarDurationInput">
+                <option value="30">30min</option>
+                <option value="60" selected>1h</option>
+                <option value="90">1h30</option>
+                <option value="120">2h</option>
+                <option value="180">3h</option>
+              </select>
+            </label>
+          </div>
+        </section>
 
         <label>
           Notas
