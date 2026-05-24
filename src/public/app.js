@@ -996,13 +996,20 @@ function renderSubtaskList() {
     ? `${done}/${currentSubtasks.length}`
     : '';
 
-  ul.innerHTML = currentSubtasks.map(sub => `
-    <li class="subtask-item ${sub.done ? 'done' : ''}" data-sub-id="${sub.id}">
-      <input type="checkbox" ${sub.done ? 'checked' : ''} data-toggle-sub="${sub.id}" />
-      <span>${escapeHtml(sub.title)}</span>
-      <button type="button" data-del-sub="${sub.id}" title="Remover">×</button>
-    </li>
-  `).join('');
+  ul.innerHTML = currentSubtasks.map(sub => {
+    const dueClass = sub.due_date ? dueDateClass(sub.due_date) : '';
+    return `
+      <li class="subtask-item ${sub.done ? 'done' : ''} ${dueClass}" data-sub-id="${sub.id}">
+        <input type="checkbox" ${sub.done ? 'checked' : ''} data-toggle-sub="${sub.id}" />
+        <div class="subtask-main">
+          <span>${escapeHtml(sub.title)}</span>
+          ${sub.due_date ? `<small class="subtask-due ${dueClass}">${dueDateText(sub.due_date)}</small>` : ''}
+        </div>
+        <input class="subtask-date-input" type="date" value="${sub.due_date || ''}" data-sub-due-id="${sub.id}" aria-label="Data da subtarefa ${escapeHtml(sub.title)}" />
+        <button type="button" data-del-sub="${sub.id}" title="Remover">×</button>
+      </li>
+    `;
+  }).join('');
 }
 
 async function loadSubtasks(taskId) {
@@ -1013,14 +1020,16 @@ async function loadSubtasks(taskId) {
 
 document.querySelector('#addSubtaskBtn').addEventListener('click', async () => {
   const input = document.querySelector('#newSubtaskInput');
+  const dueInput = document.querySelector('#newSubtaskDueDateInput');
   const title = input.value.trim();
   if (!title || !currentTaskId) return;
   const result = await api(`/api/tasks/${currentTaskId}/subtasks`, {
     method: 'POST',
-    body: JSON.stringify({ title }),
+    body: JSON.stringify({ title, due_date: dueInput.value || null }),
   });
   currentSubtasks.push(result.data);
   input.value = '';
+  dueInput.value = '';
   renderSubtaskList();
 });
 
@@ -1032,12 +1041,27 @@ document.querySelector('#newSubtaskInput').addEventListener('keydown', (e) => {
 });
 
 document.querySelector('#subtaskList').addEventListener('change', async (e) => {
-  const id = e.target.dataset.toggleSub;
-  if (!id) return;
-  const done = e.target.checked;
-  await api(`/api/subtasks/${id}`, { method: 'PATCH', body: JSON.stringify({ done }) });
-  const sub = currentSubtasks.find(s => s.id === Number(id));
-  if (sub) sub.done = done;
+  const toggleId = e.target.dataset.toggleSub;
+  const dueId = e.target.dataset.subDueId;
+
+  if (toggleId) {
+    const updated = await api(`/api/subtasks/${toggleId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ done: e.target.checked }),
+    });
+    const sub = currentSubtasks.find(s => s.id === Number(toggleId));
+    if (sub) Object.assign(sub, updated.data);
+  }
+
+  if (dueId) {
+    const updated = await api(`/api/subtasks/${dueId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ due_date: e.target.value || null }),
+    });
+    const sub = currentSubtasks.find(s => s.id === Number(dueId));
+    if (sub) Object.assign(sub, updated.data);
+  }
+
   renderSubtaskList();
 });
 
@@ -1066,6 +1090,8 @@ function resetForm() {
   document.querySelector('#taskDetail').hidden      = true;
   document.querySelector('#deleteBtn').hidden       = true;
   document.querySelector('#subtasksSection').style.display = 'none';
+  document.querySelector('#newSubtaskInput').value = '';
+  document.querySelector('#newSubtaskDueDateInput').value = '';
   currentSubtasks = [];
   currentTaskId   = null;
 }
@@ -1129,7 +1155,7 @@ async function saveTask(event) {
       if (!sub.id) {
         await api(`/api/tasks/${taskId}/subtasks`, {
           method: 'POST',
-          body: JSON.stringify({ title: sub.title }),
+          body: JSON.stringify({ title: sub.title, due_date: sub.due_date || null }),
         });
       }
     }
