@@ -182,6 +182,25 @@ Exemplo:
 /app/data -> volume persistente kronos-data
 ```
 
+### Login web do Kronos
+
+O frontend usa login com usuário e senha. Gere o hash da senha antes do deploy:
+
+```bash
+npm run hash-password -- "sua-senha-forte"
+```
+
+Configure no EasyPanel:
+
+```env
+KRONOS_AUTH_USERNAME=lauro
+KRONOS_AUTH_PASSWORD_HASH=<hash-gerado>
+KRONOS_SESSION_SECRET=<segredo-forte>
+KRONOS_SESSION_DAYS=30
+```
+
+O login cria um cookie `httpOnly` assinado por HMAC. A variável `KRONOS_API_KEY` continua opcional para chamadas técnicas via header `X-Api-Key`, como curl, n8n e automações.
+
 **Salvar e iniciar container.**
 
 ---
@@ -284,6 +303,12 @@ PLUGAI_JWT=...
 GOOGLE_SERVICE_ACCOUNT_JSON=...
 GOOGLE_DRIVE_FOLDER_ID=...
 LAURO_PHONE=5562998441163
+KRONOS_AUTH_USERNAME=lauro
+KRONOS_AUTH_PASSWORD_HASH=<hash-gerado>
+KRONOS_SESSION_SECRET=<segredo-forte>
+KRONOS_SESSION_DAYS=30
+KRONOS_API_KEY=<opcional-para-automacoes>
+SQLITE_PATH=/app/data/kronos.sqlite
 ```
 
 ---

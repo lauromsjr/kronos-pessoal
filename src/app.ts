@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { initTaskSchema } from './database/sqlite';
+import { authRouter } from './modules/auth/auth.routes';
 import { ensureSubtasksTable, tasksRouter } from './modules/tasks/tasks.routes';
 import { startDailySqliteBackup } from './modules/cron/backup';
 
@@ -22,6 +23,7 @@ async function bootstrap() {
     res.json({ ok: true, service: 'kronos-tasks', ts: new Date().toISOString() });
   });
 
+  app.use('/api', authRouter);
   app.use('/api', tasksRouter);
 
   app.get('*', (_req, res) => {
