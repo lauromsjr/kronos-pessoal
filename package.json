@@ -7,6 +7,7 @@
     "build": "tsc",
     "start": "node dist/app.js",
     "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
+    "hash-password": "node scripts/hash-password.js",
     "migrate": "ts-node src/database/migrate.ts",
     "lint": "eslint src/**/*.ts"
   },

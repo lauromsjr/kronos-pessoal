@@ -21,6 +21,10 @@ const state = {
 const board = document.querySelector('#taskBoard');
 const modal = document.querySelector('#taskModal');
 const form  = document.querySelector('#taskForm');
+const appView = document.querySelector('#appView');
+const loginView = document.querySelector('#loginView');
+const loginForm = document.querySelector('#loginForm');
+const loginError = document.querySelector('#loginError');
 
 const fields = {
   id:      document.querySelector('#taskId'),
@@ -44,18 +48,14 @@ function qs(params) {
 }
 
 async function api(path, options = {}) {
-  const key = localStorage.getItem('KRONOS_API_KEY');
-  const { _retriedAuth, headers = {}, ...fetchOptions } = options;
+  const { headers = {}, ...fetchOptions } = options;
   const res = await fetch(path, {
     ...fetchOptions,
-    headers: { 'Content-Type': 'application/json', ...(key ? { 'X-Api-Key': key } : {}), ...headers },
+    headers: { 'Content-Type': 'application/json', ...headers },
   });
-  if (res.status === 401 && !_retriedAuth) {
-    const nextKey = prompt('Informe a chave de acesso do Kronos');
-    if (nextKey) {
-      localStorage.setItem('KRONOS_API_KEY', nextKey);
-      return api(path, { ...options, _retriedAuth: true });
-    }
+  if (res.status === 401) {
+    showLogin();
+    throw new Error('Unauthorized');
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -66,15 +66,10 @@ async function api(path, options = {}) {
 }
 
 async function downloadCsv() {
-  const key = localStorage.getItem('KRONOS_API_KEY');
-  const res = await fetch('/api/tasks/export?format=csv', {
-    headers: key ? { 'X-Api-Key': key } : {},
-  });
+  const res = await fetch('/api/tasks/export?format=csv');
   if (res.status === 401) {
-    const nextKey = prompt('Informe a chave de acesso do Kronos');
-    if (nextKey) localStorage.setItem('KRONOS_API_KEY', nextKey);
-    else throw new Error('Unauthorized');
-    return downloadCsv();
+    showLogin();
+    throw new Error('Unauthorized');
   }
   if (!res.ok) throw new Error('Erro ao exportar CSV');
 
@@ -85,6 +80,67 @@ async function downloadCsv() {
   link.download = 'kronos_tasks.csv';
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function showLogin(message = '') {
+  appView.hidden = true;
+  loginView.hidden = false;
+  loginError.hidden = !message;
+  loginError.textContent = message;
+  document.querySelector('#loginPassword').value = '';
+  document.querySelector('#loginUsername').focus();
+}
+
+function showApp() {
+  loginView.hidden = true;
+  appView.hidden = false;
+  loginError.hidden = true;
+  loginError.textContent = '';
+}
+
+async function checkAuth() {
+  const res = await fetch('/api/auth/me');
+  if (!res.ok) return false;
+  const body = await res.json().catch(() => ({}));
+  return Boolean(body.authenticated);
+}
+
+async function submitLogin(event) {
+  event.preventDefault();
+  loginError.hidden = true;
+  loginError.textContent = '';
+
+  const username = document.querySelector('#loginUsername').value.trim();
+  const password = document.querySelector('#loginPassword').value;
+
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+
+  if (!res.ok) {
+    showLogin('Usuário ou senha inválidos.');
+    return;
+  }
+
+  showApp();
+  await loadTasks();
+}
+
+async function logout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  showLogin();
+}
+
+async function init() {
+  if (await checkAuth()) {
+    showApp();
+    await loadTasks();
+    return;
+  }
+
+  showLogin();
 }
 
 function escapeHtml(v) {
@@ -642,6 +698,9 @@ document.querySelector('#loadMoreBtn').addEventListener('click', async () => {
   await loadMoreCompleted();
 });
 
+loginForm.addEventListener('submit', submitLogin);
+document.querySelector('#logoutBtn').addEventListener('click', logout);
+
 board.addEventListener('change', async (e) => {
   const id = e.target.dataset.statusId;
   if (!id) return;
@@ -659,4 +718,4 @@ board.addEventListener('click', async (e) => {
 });
 
 setInterval(render, 60000);
-loadTasks();
+init();

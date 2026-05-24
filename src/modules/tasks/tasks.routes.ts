@@ -1,6 +1,7 @@
-import { NextFunction, Request, Response, Router } from 'express';
+import { Router } from 'express';
 import { z } from 'zod';
 import { getDb } from '../../database/sqlite';
+import { requireTaskAuth } from '../auth/auth';
 
 const router = Router();
 
@@ -72,23 +73,12 @@ function normalizeTask(input: z.infer<typeof taskInput>) {
   };
 }
 
-function requireApiKey(req: Request, res: Response, next: NextFunction) {
-  const expected = process.env.KRONOS_API_KEY;
-  if (!expected) return next();
-
-  if (req.header('X-Api-Key') !== expected) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  return next();
-}
-
 function csvEscape(value: unknown) {
   if (value === null || value === undefined) return '';
   return `"${String(value).replaceAll('"', '""').replace(/\r?\n/g, '\n')}"`;
 }
 
-router.use(['/tasks', '/subtasks'], requireApiKey);
+router.use(['/tasks', '/subtasks'], requireTaskAuth);
 
 async function applyStatusChange(taskId: number, nextStatus: string) {
   const db = await getDb();

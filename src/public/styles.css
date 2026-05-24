@@ -45,10 +45,45 @@ body {
 button, input, select, textarea { font: inherit; }
 button, select { cursor: pointer; }
 
+[hidden] { display: none !important; }
+
 .shell {
   width: min(1200px, calc(100% - 48px));
   margin: 0 auto;
   padding: 36px 0 64px;
+}
+
+.login-view {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.login-card {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 28px;
+  box-shadow: 0 18px 48px rgba(26,54,93,0.12);
+}
+
+.login-card h1 {
+  font-size: clamp(1.45rem, 6vw, 2rem);
+  margin-bottom: 4px;
+}
+
+.login-error {
+  border: 1px solid rgba(192,57,43,0.22);
+  border-radius: 8px;
+  background: #FEF2F2;
+  color: var(--danger);
+  padding: 9px 11px;
+  font-size: 0.8rem;
+  font-weight: 700;
 }
 
 /* ── HEADER ── */
@@ -61,6 +96,12 @@ button, select { cursor: pointer; }
 }
 
 .brand { display: flex; flex-direction: column; gap: 4px; }
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 
 .eyebrow {
   font-family: var(--font-title);
@@ -589,6 +630,11 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold); }
 
 .btn-secondary:hover { border-color: var(--navy); color: var(--navy); }
 
+.btn-logout {
+  min-height: 36px;
+  padding: 8px 12px;
+}
+
 .btn-danger {
   border: 1px solid rgba(192,57,43,0.3);
   border-radius: 8px;
@@ -807,6 +853,7 @@ dialog::backdrop {
 @media (max-width: 640px) {
   .shell { width: calc(100% - 32px); padding-top: 20px; }
   .topbar { flex-direction: column; align-items: flex-start; }
+  .topbar-actions { width: 100%; justify-content: space-between; }
   .toolbar { flex-direction: column; align-items: stretch; }
   .filters, .grid-2 { grid-template-columns: 1fr; }
   .board { grid-template-columns: 1fr; }

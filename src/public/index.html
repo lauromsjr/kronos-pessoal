@@ -10,7 +10,24 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <main class="shell">
+    <section id="loginView" class="login-view">
+      <form id="loginForm" class="login-card">
+        <span class="eyebrow">Sistema Kronos</span>
+        <h1>Acesso ao Kronos</h1>
+        <label>
+          Usuário
+          <input id="loginUsername" autocomplete="username" required />
+        </label>
+        <label>
+          Senha
+          <input id="loginPassword" type="password" autocomplete="current-password" required />
+        </label>
+        <button class="btn-primary" type="submit">Entrar</button>
+        <p id="loginError" class="login-error" hidden></p>
+      </form>
+    </section>
+
+    <main class="shell" id="appView" hidden>
 
       <!-- HEADER -->
       <header class="topbar">
@@ -18,7 +35,10 @@
           <span class="eyebrow">Sistema Kronos</span>
           <h1>Gestão <span class="gold">Operacional</span></h1>
         </div>
-        <button class="btn-primary" id="addTaskBtn" type="button">+ Adicionar</button>
+        <div class="topbar-actions">
+          <button class="btn-secondary btn-logout" id="logoutBtn" type="button">Sair</button>
+          <button class="btn-primary" id="addTaskBtn" type="button">+ Adicionar</button>
+        </div>
       </header>
 
       <!-- MÉTRICAS -->
