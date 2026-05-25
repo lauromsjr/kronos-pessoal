@@ -124,6 +124,19 @@
           <div class="daily-history-list" id="dailyHistoryList"></div>
         </section>
 
+        <section class="weekly-report-card" id="weeklyReportCard" aria-label="Resumo semanal">
+          <div class="weekly-report-head">
+            <div>
+              <span class="metric-label">Resumo semanal</span>
+              <h2>Execucao dos ultimos 7 dias</h2>
+              <p id="weeklyReportRange">Carregando resumo semanal...</p>
+            </div>
+            <button class="btn-secondary" id="refreshWeeklyReportBtn" type="button">Atualizar resumo</button>
+          </div>
+          <div class="weekly-report-grid" id="weeklyReportSummary"></div>
+          <div class="weekly-report-sections" id="weeklyReportSections"></div>
+        </section>
+
         <!-- TOOLBAR -->
         <section class="toolbar" aria-label="Filtros">
           <nav class="tabs" aria-label="Listas">

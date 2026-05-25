@@ -16,6 +16,7 @@ const state = {
   today:      null,
   dailyReview: null,
   dailyReviewHistory: [],
+  weeklyReport: null,
   todayCollapsed: localStorage.getItem('Kronos_TODAY_COLLAPSED') === 'true',
   activeView: 'execution',
   backupsLoaded: false,
@@ -571,6 +572,98 @@ async function loadDailyReviewHistory() {
   renderDailyReviewHistory();
 }
 
+function weeklyMetric(label, value) {
+  return `
+    <div class="weekly-metric">
+      <span>${label}</span>
+      <strong>${value || 0}</strong>
+    </div>
+  `;
+}
+
+function renderWeeklyTask(task, dateField) {
+  const dateValue = task[dateField] ? formatDateTime(task[dateField]) : '';
+  return `
+    <li>
+      <strong>${escapeHtml(task.title)}</strong>
+      <span>${companyLabel(task.company)} · ${task.impact || '-'}${dateValue ? ` · ${dateValue}` : ''}</span>
+    </li>
+  `;
+}
+
+function renderWeeklyTextItems(items, emptyText) {
+  return items.length
+    ? `<ul>${items.map(item => `
+        <li>
+          <strong>${formatDate(item.review_date)}</strong>
+          <span>${escapeHtml(item.text)}</span>
+        </li>
+      `).join('')}</ul>`
+    : `<p class="daily-empty">${emptyText}</p>`;
+}
+
+function renderWeeklyReport() {
+  const report = state.weeklyReport;
+  const rangeEl = document.querySelector('#weeklyReportRange');
+  const summaryEl = document.querySelector('#weeklyReportSummary');
+  const sectionsEl = document.querySelector('#weeklyReportSections');
+  if (!rangeEl || !summaryEl || !sectionsEl) return;
+
+  if (!report) {
+    rangeEl.textContent = 'Resumo semanal indisponivel.';
+    summaryEl.innerHTML = '';
+    sectionsEl.innerHTML = '<p class="daily-empty">Ainda nao ha dados suficientes nesta semana.</p>';
+    return;
+  }
+
+  const summary = report.summary || {};
+  const hasData = [
+    summary.tasks_created,
+    summary.tasks_completed,
+    summary.daily_reviews_started,
+    summary.daily_reviews_closed,
+    summary.priority_count,
+    summary.blocker_count,
+  ].some((value) => Number(value) > 0);
+
+  rangeEl.textContent = `${formatDate(report.range.start)} a ${formatDate(report.range.end)}`;
+  summaryEl.innerHTML = [
+    weeklyMetric('Criadas', summary.tasks_created),
+    weeklyMetric('Concluidas', summary.tasks_completed),
+    weeklyMetric('Dias iniciados', summary.daily_reviews_started),
+    weeklyMetric('Dias encerrados', summary.daily_reviews_closed),
+    weeklyMetric('Prioridades', summary.priority_count),
+    weeklyMetric('Bloqueios', summary.blocker_count),
+  ].join('');
+
+  if (!hasData) {
+    sectionsEl.innerHTML = '<p class="daily-empty">Ainda nao ha dados suficientes nesta semana.</p>';
+    return;
+  }
+
+  sectionsEl.innerHTML = `
+    <section class="weekly-report-section">
+      <h3>Bloqueios registrados</h3>
+      ${renderWeeklyTextItems(report.blockers || [], 'Nenhum bloqueio registrado.')}
+    </section>
+    <section class="weekly-report-section">
+      <h3>Foco dos proximos dias</h3>
+      ${renderWeeklyTextItems(report.tomorrow_focus || [], 'Nenhum foco registrado.')}
+    </section>
+    <section class="weekly-report-section">
+      <h3>Concluidas na semana</h3>
+      ${(report.completed_tasks || []).length
+        ? `<ul>${report.completed_tasks.slice(0, 8).map(task => renderWeeklyTask(task, 'completed_at')).join('')}</ul>`
+        : '<p class="daily-empty">Nenhuma tarefa concluida nesta semana.</p>'}
+    </section>
+  `;
+}
+
+async function loadWeeklyReport() {
+  state.weeklyReport = await api('/api/reports/weekly');
+  renderWeeklyReport();
+}
+
 function openDailyReviewHistoryDetail(review) {
   const priorities = reviewPriorityTasks(review);
   const detail = document.querySelector('#dailyHistoryDetail');
@@ -649,6 +742,7 @@ async function saveStartDay(event) {
   document.querySelector('#startDayModal').close();
   renderDailyReview();
   await loadDailyReviewHistory();
+  await loadWeeklyReport();
 }
 
 async function completedTasksToday() {
@@ -691,6 +785,7 @@ async function saveCloseDay(event) {
   document.querySelector('#closeDayModal').close();
   renderDailyReview();
   await loadDailyReviewHistory();
+  await loadWeeklyReport();
 }
 
 function renderCalendarStatus() {
@@ -1239,6 +1334,7 @@ async function loadTasks() {
   await loadToday();
   await loadDailyReview();
   await loadDailyReviewHistory();
+  await loadWeeklyReport();
   updateMetrics();
 
   const isConcluida = state.list === 'Concluida';
@@ -1589,6 +1685,9 @@ document.querySelector('#closeDailyHistoryBtn').addEventListener('click', () => 
 document.querySelector('#doneDailyHistoryBtn').addEventListener('click', () => document.querySelector('#dailyHistoryModal').close());
 document.querySelector('#refreshDailyHistoryBtn').addEventListener('click', async () => {
   await loadDailyReviewHistory();
+});
+document.querySelector('#refreshWeeklyReportBtn').addEventListener('click', async () => {
+  await loadWeeklyReport();
 });
 document.querySelector('#startDayForm').addEventListener('submit', saveStartDay);
 document.querySelector('#closeDayForm').addEventListener('submit', saveCloseDay);

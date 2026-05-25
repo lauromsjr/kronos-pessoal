@@ -730,6 +730,112 @@ h2, h3 { font-family: var(--font-title); }
   padding-top: 10px;
 }
 
+.weekly-report-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 16px;
+  margin-bottom: 18px;
+}
+
+.weekly-report-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.weekly-report-head h2 {
+  color: var(--navy);
+  font-size: 1rem;
+  font-weight: 900;
+  margin-top: 4px;
+}
+
+.weekly-report-head p {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.weekly-report-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.weekly-metric {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  padding: 9px;
+}
+
+.weekly-metric span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.weekly-metric strong {
+  color: var(--navy);
+  font-family: var(--font-title);
+  font-size: 1.15rem;
+}
+
+.weekly-report-sections {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.weekly-report-section {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  border-top: 2px solid var(--panel-3);
+  padding-top: 9px;
+}
+
+.weekly-report-section h3 {
+  color: var(--navy);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.weekly-report-section ul {
+  display: grid;
+  gap: 7px;
+  list-style: none;
+}
+
+.weekly-report-section li {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  padding: 9px;
+}
+
+.weekly-report-section strong {
+  color: var(--text);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.weekly-report-section span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 /* ── BACKUPS ── */
 .backup-panel {
   display: grid;
@@ -1708,6 +1814,8 @@ dialog::backdrop {
 @media (max-width: 900px) {
   .metrics { grid-template-columns: repeat(2, 1fr); }
   .today-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .weekly-report-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .weekly-report-sections { grid-template-columns: 1fr; }
   .settings-view { grid-template-columns: 1fr; }
   .settings-view .backup-panel { grid-row: auto; }
 }
@@ -1739,6 +1847,7 @@ dialog::backdrop {
   .today-panel,
   .daily-review-card,
   .daily-history-card,
+  .weekly-report-card,
   .backup-panel,
   .settings-card { padding: 14px; }
   .daily-review-head { display: grid; gap: 10px; }
@@ -1746,6 +1855,9 @@ dialog::backdrop {
   .daily-history-head .btn-secondary { width: 100%; }
   .daily-history-item { grid-template-columns: 1fr; }
   .daily-history-item .btn-secondary { width: 100%; }
+  .weekly-report-head { display: grid; gap: 10px; }
+  .weekly-report-head .btn-secondary { width: 100%; }
+  .weekly-report-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .daily-review-actions { justify-content: stretch; display: grid; grid-template-columns: 1fr; }
   .daily-review-actions button { flex: 1; }
   .daily-modal {
@@ -1840,6 +1952,7 @@ dialog::backdrop {
 
 @media (max-width: 420px) {
   .metrics { grid-template-columns: 1fr; }
+  .weekly-report-grid { grid-template-columns: 1fr; }
   .tabs { grid-template-columns: 1fr; }
   .topbar-actions { grid-template-columns: 1fr; }
 }
