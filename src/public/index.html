@@ -312,6 +312,29 @@
           <input id="dueDateInput" type="date" />
         </label>
 
+        <section class="recurrence-section">
+          <div class="recurrence-head">
+            <span class="detail-label">Recorrencia</span>
+          </div>
+          <div class="recurrence-fields">
+            <label>
+              Repetir
+              <select id="recurrenceTypeInput">
+                <option value="none">Nao repetir</option>
+                <option value="daily">Diariamente</option>
+                <option value="weekly">Semanalmente</option>
+                <option value="monthly">Mensalmente</option>
+              </select>
+            </label>
+            <label>
+              Intervalo
+              <input id="recurrenceIntervalInput" type="number" min="1" max="30" value="1" />
+            </label>
+          </div>
+          <input id="recurrenceNextDateInput" type="hidden" />
+          <p class="recurrence-note" id="recurrenceNote">Ao concluir, uma nova tarefa sera criada automaticamente.</p>
+        </section>
+
         <section class="calendar-sync-section">
           <div class="calendar-sync-head">
             <span class="detail-label">Google Agenda</span>
