@@ -258,7 +258,10 @@
       <form class="modal" id="taskForm" method="dialog">
         <div class="modal-head">
           <h2 id="modalTitle">Nova tarefa</h2>
-          <button class="btn-icon" id="closeModalBtn" type="button" aria-label="Fechar">✕</button>
+          <div class="modal-head-actions">
+            <button class="btn-complete" id="completeTaskBtn" type="button" hidden>Concluir</button>
+            <button class="btn-icon" id="closeModalBtn" type="button" aria-label="Fechar">✕</button>
+          </div>
         </div>
 
         <input type="hidden" id="taskId" />
