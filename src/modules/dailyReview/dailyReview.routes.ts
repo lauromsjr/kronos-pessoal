@@ -19,6 +19,9 @@ const closeInput = z.object({
 const suggestInput = z.object({
   task_ids: z.array(z.number().int().positive()).max(60).optional(),
 });
+const sendWhatsAppInput = z.object({
+  review_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
 
 const dateParam = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -214,6 +217,117 @@ async function getReviewByDate(reviewDate: string) {
   return db.get('SELECT * FROM daily_reviews WHERE review_date = ?', reviewDate);
 }
 
+function getEvolutionConfig() {
+  const baseUrl = process.env.EVOLUTION_API_BASE_URL || process.env.EVOLUTION_API_URL || '';
+  const instance = process.env.EVOLUTION_API_INSTANCE || process.env.EVOLUTION_INSTANCE || '';
+  const apiKey = process.env.EVOLUTION_API_KEY || '';
+  const authHeader = (process.env.EVOLUTION_API_AUTH_HEADER || 'apikey').trim();
+  const sendPath = process.env.EVOLUTION_API_SEND_TEXT_PATH || '/message/sendText/{instance}';
+  const number = process.env.WHATSAPP_DAILY_SUMMARY_TO || '';
+
+  return { baseUrl, instance, apiKey, authHeader, sendPath, number };
+}
+
+function isWhatsAppConfigured() {
+  const config = getEvolutionConfig();
+  const validHeader = config.authHeader === 'apikey' || config.authHeader === 'Authorization';
+  return Boolean(config.baseUrl && config.instance && config.apiKey && config.number && validHeader);
+}
+
+function buildEvolutionSendTextPayload(message: string) {
+  return {
+    number: process.env.WHATSAPP_DAILY_SUMMARY_TO || '',
+    text: message,
+  };
+}
+
+async function getPriorityTasksByIds(ids: number[]) {
+  if (!ids.length) return [];
+  const db = await getDb();
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = await db.all(
+    `SELECT id, title
+     FROM tasks
+     WHERE id IN (${placeholders})`,
+    ids
+  ) as Array<{ id: number; title: string }>;
+  const map = new Map(rows.map((row) => [row.id, row.title]));
+  return ids.map((id) => ({ id, title: map.get(id) || `Tarefa #${id}` }));
+}
+
+async function getCompletedTasksForDate(reviewDate: string) {
+  const db = await getDb();
+  const rows = await db.all(
+    `SELECT id, title
+     FROM tasks
+     WHERE completed_at IS NOT NULL
+       AND date(completed_at, '-3 hours') = ?
+     ORDER BY completed_at ASC`,
+    reviewDate
+  ) as Array<{ id: number; title: string }>;
+  return rows;
+}
+
+function buildDailySummaryWhatsAppMessage(data: {
+  reviewDate: string;
+  priorities: Array<{ id: number; title: string }>;
+  completed: Array<{ id: number; title: string }>;
+  summary: string;
+  blockers: string;
+  tomorrowFocus: string;
+}) {
+  const dateBr = new Date(`${data.reviewDate}T12:00:00`).toLocaleDateString('pt-BR');
+  const priorities = data.priorities.length
+    ? data.priorities.map((item, index) => `${index + 1}. ${item.title}`).join('\n')
+    : 'Nenhuma registrada.';
+  const completed = data.completed.length
+    ? data.completed.map((item) => `- ${item.title}`).join('\n')
+    : 'Nenhuma registrada.';
+
+  return [
+    `Resumo do dia — ${dateBr}`,
+    '',
+    'Prioridades:',
+    priorities,
+    '',
+    'Concluídas:',
+    completed,
+    '',
+    'Resumo:',
+    data.summary.trim() || 'Não informado.',
+    '',
+    'Bloqueios:',
+    data.blockers.trim() || 'Não informado.',
+    '',
+    'Foco de amanhã:',
+    data.tomorrowFocus.trim() || 'Não informado.',
+  ].join('\n');
+}
+
+async function sendDailySummaryToEvolution(message: string) {
+  const config = getEvolutionConfig();
+  const url = `${config.baseUrl.replace(/\/+$/, '')}${config.sendPath.replace('{instance}', config.instance)}`;
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (config.authHeader === 'Authorization') {
+    headers.Authorization = `Bearer ${config.apiKey}`;
+  } else {
+    headers.apikey = config.apiKey;
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(buildEvolutionSendTextPayload(message)),
+  });
+
+  if (!response.ok) {
+    throw new Error('Evolution API request failed');
+  }
+}
+
 router.use('/daily-review', requireApiAuth);
 
 router.get('/daily-review/today', async (_req, res, next) => {
@@ -392,6 +506,52 @@ router.post('/daily-review/close', async (req, res, next) => {
     res.json(normalizeDailyReview(row, reviewDate));
   } catch (err) {
     next(err);
+  }
+});
+
+router.post('/daily-review/send-whatsapp-summary', async (req, res, next) => {
+  try {
+    if (!isWhatsAppConfigured()) {
+      return res.status(400).json({ error: 'WhatsApp não configurado.' });
+    }
+
+    const parsed = sendWhatsAppInput.parse(req.body || {});
+    const reviewDate = parsed.review_date || todayInSaoPaulo();
+    const review = await getReviewByDate(reviewDate);
+    if (!review) {
+      return res.status(404).json({ error: 'Resumo diário não encontrado.' });
+    }
+
+    const normalized = normalizeDailyReview(review, reviewDate);
+    const [priorities, completed] = await Promise.all([
+      getPriorityTasksByIds(normalized.selected_priority_task_ids),
+      getCompletedTasksForDate(reviewDate),
+    ]);
+
+    const message = buildDailySummaryWhatsAppMessage({
+      reviewDate,
+      priorities,
+      completed,
+      summary: normalized.summary,
+      blockers: normalized.blockers,
+      tomorrowFocus: normalized.tomorrow_focus,
+    });
+
+    await sendDailySummaryToEvolution(message);
+
+    return res.json({
+      ok: true,
+      review_date: reviewDate,
+      message: 'Resumo enviado por WhatsApp.',
+      auth_header: (process.env.EVOLUTION_API_AUTH_HEADER || 'apikey').trim(),
+      payload_format: 'number + text',
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Não foi possível enviar o resumo.';
+    if (message === 'WhatsApp não configurado.' || message === 'Resumo diário não encontrado.') {
+      return res.status(400).json({ error: message });
+    }
+    return res.status(400).json({ error: 'Não foi possível enviar o resumo.' });
   }
 });
 

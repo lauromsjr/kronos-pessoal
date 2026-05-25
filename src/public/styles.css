@@ -569,6 +569,13 @@ h2, h3 { font-family: var(--font-title); }
   justify-content: flex-end;
 }
 
+.daily-whatsapp-message {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .daily-empty,
 .daily-modal-note {
   color: var(--muted);

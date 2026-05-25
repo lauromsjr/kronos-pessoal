@@ -543,6 +543,8 @@ function renderDailyReview() {
   const bodyEl = document.querySelector('#dailyReviewBody');
   const startBtn = document.querySelector('#startDayBtn');
   const closeBtn = document.querySelector('#closeDayBtn');
+  const whatsappBtn = document.querySelector('#sendWhatsappSummaryBtn');
+  const whatsappMsg = document.querySelector('#dailyWhatsappMessage');
   if (!review || !statusEl || !metaEl || !bodyEl) return;
 
   statusEl.textContent = dailyReviewStatusLabel(review.status);
@@ -550,6 +552,9 @@ function renderDailyReview() {
   metaEl.textContent = `${formatDate(review.review_date)} · ${dailyReviewStatusLabel(review.status)}`;
   startBtn.disabled = review.status === 'closed';
   closeBtn.disabled = review.status === 'not_started';
+  whatsappBtn.hidden = review.status !== 'closed';
+  whatsappBtn.disabled = review.status !== 'closed';
+  whatsappMsg.textContent = review.status === 'closed' ? 'Envio manual: somente quando você confirmar.' : '';
 
   const priorities = selectedPriorityTasks();
   const prioritiesHtml = priorities.length
@@ -566,6 +571,27 @@ function renderDailyReview() {
   }
 
   bodyEl.innerHTML = prioritiesHtml;
+}
+
+async function sendWhatsappDailySummary() {
+  if (!state.dailyReview?.review_date || state.dailyReview.status !== 'closed') return;
+  const msgEl = document.querySelector('#dailyWhatsappMessage');
+  if (!confirm('Enviar resumo do dia por WhatsApp?')) return;
+
+  msgEl.textContent = 'Enviando resumo...';
+  try {
+    const result = await api('/api/daily-review/send-whatsapp-summary', {
+      method: 'POST',
+      body: JSON.stringify({ review_date: state.dailyReview.review_date }),
+    });
+    msgEl.textContent = result.message || 'Resumo enviado por WhatsApp.';
+  } catch (err) {
+    if (err.message === 'WhatsApp não configurado.') {
+      msgEl.textContent = 'WhatsApp não configurado.';
+      return;
+    }
+    msgEl.textContent = 'Não foi possível enviar o resumo.';
+  }
 }
 
 async function loadDailyReview() {
@@ -1842,6 +1868,9 @@ document.querySelector('#closeDailyHistoryBtn').addEventListener('click', () => 
 document.querySelector('#doneDailyHistoryBtn').addEventListener('click', () => document.querySelector('#dailyHistoryModal').close());
 document.querySelector('#suggestPrioritiesBtn').addEventListener('click', async () => {
   await suggestPrioritiesWithAi();
+});
+document.querySelector('#sendWhatsappSummaryBtn').addEventListener('click', async () => {
+  await sendWhatsappDailySummary();
 });
 document.querySelector('#refreshDailyHistoryBtn').addEventListener('click', async () => {
   await loadDailyReviewHistory();

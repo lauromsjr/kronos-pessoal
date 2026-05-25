@@ -271,6 +271,26 @@ As sugestoes nao sao salvas automaticamente: o usuario precisa revisar, ajustar 
 
 Esta fase nao envia WhatsApp, nao altera o Kanban e nao altera Google Agenda/OAuth.
 
+### Envio manual do resumo diário por WhatsApp
+
+Depois de encerrar o dia, o card **Rotina diária** mostra o botão **Enviar resumo por WhatsApp**. O envio é sempre manual e pede confirmação.
+
+Configure no EasyPanel:
+
+```env
+EVOLUTION_API_BASE_URL=https://evoapi.plugaimarketing.com
+EVOLUTION_API_INSTANCE=Kronos
+EVOLUTION_API_KEY=sua-chave
+EVOLUTION_API_AUTH_HEADER=apikey
+EVOLUTION_API_SEND_TEXT_PATH=/message/sendText/{instance}
+WHATSAPP_DAILY_SUMMARY_TO=55DDDNUMERO
+```
+
+Uso:
+1. Encerrar o dia.
+2. Clicar em **Enviar resumo por WhatsApp**.
+3. Confirmar envio.
+
 **Salvar e iniciar container.**
 
 ---
