@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { getDb } from '../../database/sqlite';
 import { requireApiAuth } from '../auth/auth';
+import { listCalendarEvents } from '../calendar/googleCalendar';
 
 const router = Router();
 
@@ -13,6 +14,10 @@ const closeInput = z.object({
   summary: z.string().trim().max(5000).optional().default(''),
   blockers: z.string().trim().max(5000).optional().default(''),
   tomorrow_focus: z.string().trim().max(5000).optional().default(''),
+});
+
+const suggestInput = z.object({
+  task_ids: z.array(z.number().int().positive()).max(60).optional(),
 });
 
 const dateParam = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -89,6 +94,121 @@ function normalizeDailyReview(row: any, reviewDate = todayInSaoPaulo()) {
   };
 }
 
+function addDays(date: string, days: number) {
+  const next = new Date(`${date}T00:00:00-03:00`);
+  next.setUTCDate(next.getUTCDate() + days);
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(next);
+}
+
+async function getSubtaskCounts(db: Awaited<ReturnType<typeof getDb>>, taskIds: number[]) {
+  if (!taskIds.length) return {};
+  const placeholders = taskIds.map(() => '?').join(',');
+  const rows = await db.all(
+    `SELECT task_id,
+            COUNT(*) as total,
+            SUM(CASE WHEN done = 1 THEN 1 ELSE 0 END) as done
+     FROM subtasks WHERE task_id IN (${placeholders}) GROUP BY task_id`,
+    taskIds
+  );
+  const map: Record<number, { total: number; done: number }> = {};
+  rows.forEach((row: any) => { map[row.task_id] = { total: row.total, done: row.done || 0 }; });
+  return map;
+}
+
+async function getPriorityCandidateTasks(taskIds?: number[]) {
+  const db = await getDb();
+  const today = todayInSaoPaulo();
+  const tomorrow = addDays(today, 1);
+  const values: unknown[] = [today, today, tomorrow];
+  const optionalIdFilter = taskIds?.length
+    ? ` AND id IN (${taskIds.map(() => '?').join(',')})`
+    : '';
+
+  if (taskIds?.length) values.push(...taskIds);
+
+  const rows = await db.all(
+    `SELECT id, title, company, impact, status, due_date, list_type
+     FROM tasks
+     WHERE status != 'Concluída'
+       AND (
+         (due_date IS NOT NULL AND due_date < ?)
+         OR due_date = ?
+         OR due_date = ?
+         OR status = 'Em andamento'
+         OR impact = 'Alto'
+       )
+       ${optionalIdFilter}
+     ORDER BY
+       CASE WHEN due_date IS NULL THEN 1 ELSE 0 END,
+       due_date ASC,
+       CASE status WHEN 'Em andamento' THEN 0 WHEN 'A fazer' THEN 1 WHEN 'Pausada' THEN 2 ELSE 3 END,
+       CASE impact WHEN 'Alto' THEN 0 WHEN 'Médio' THEN 1 ELSE 2 END,
+       created_at ASC
+     LIMIT 40`,
+    values
+  );
+
+  const counts = await getSubtaskCounts(db, rows.map((task: any) => task.id));
+  return rows.map((task: any) => ({
+    id: task.id,
+    title: task.title,
+    company: task.company || null,
+    impact: task.impact || null,
+    status: task.status,
+    due_date: task.due_date || null,
+    list_type: task.list_type,
+    subtasks_total: counts[task.id]?.total || 0,
+    subtasks_done: counts[task.id]?.done || 0,
+  }));
+}
+
+function parseAiJson(content: string) {
+  const trimmed = content.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return JSON.parse(fenced ? fenced[1] : trimmed);
+}
+
+async function callOpenAiForPrioritySuggestions(context: unknown) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error('IA não configurada.');
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+      temperature: 0.2,
+      messages: [
+        {
+          role: 'system',
+          content: 'Você é um assistente de execução diária. Escolha até 3 tarefas como prioridade do dia com base em urgência, impacto, prazo e andamento. Responda apenas JSON válido no formato {"suggestions":[{"task_id":number,"reason":"string"}]}. Não invente task_id.',
+        },
+        {
+          role: 'user',
+          content: JSON.stringify(context),
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Não foi possível gerar sugestões com IA.');
+  }
+
+  const body = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+  const content = body.choices?.[0]?.message?.content;
+  if (!content) throw new Error('Resposta vazia da IA.');
+  return parseAiJson(content);
+}
+
 async function getReviewByDate(reviewDate: string) {
   const db = await getDb();
   return db.get('SELECT * FROM daily_reviews WHERE review_date = ?', reviewDate);
@@ -103,6 +223,57 @@ router.get('/daily-review/today', async (_req, res, next) => {
     res.json(normalizeDailyReview(row, reviewDate));
   } catch (err) {
     next(err);
+  }
+});
+
+router.post('/daily-review/suggest-priorities', async (req, res, next) => {
+  try {
+    const parsed = suggestInput.parse(req.body || {});
+    const tasks = await getPriorityCandidateTasks(parsed.task_ids);
+    if (!tasks.length) return res.json({ suggestions: [] });
+
+    const agenda = await listCalendarEvents('today').catch(() => ({ connected: false, data: [] }));
+    const context = {
+      date: todayInSaoPaulo(),
+      rules: [
+        'Retorne no máximo 3 tarefas.',
+        'Priorize atrasadas, alto impacto, prazo de hoje, em andamento e desbloqueios importantes.',
+        'Use apenas task_id existente em tasks.',
+        'Justificativa curta, direta e prática.',
+      ],
+      tasks,
+      calendar_today: (agenda.data || []).slice(0, 12).map((event) => ({
+        title: event.title,
+        start: event.start,
+        end: event.end,
+        all_day: event.all_day,
+        company: event.company || null,
+      })),
+    };
+    const raw = await callOpenAiForPrioritySuggestions(context);
+    const validIds = new Set(tasks.map((task) => task.id));
+    const seen = new Set<number>();
+
+    const suggestions = Array.isArray(raw?.suggestions)
+      ? raw.suggestions
+          .filter((item: any) => Number.isInteger(item?.task_id) && validIds.has(item.task_id) && !seen.has(item.task_id))
+          .slice(0, 3)
+          .map((item: any) => {
+            seen.add(item.task_id);
+            return {
+              task_id: item.task_id,
+              reason: String(item.reason || 'Prioridade sugerida para hoje.').slice(0, 180),
+            };
+          })
+      : [];
+
+    res.json({ suggestions });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Não foi possível gerar sugestões com IA.';
+    if (message === 'IA não configurada.') {
+      return res.status(400).json({ error: message });
+    }
+    return next(new Error('Não foi possível gerar sugestões com IA.'));
   }
 });
 
