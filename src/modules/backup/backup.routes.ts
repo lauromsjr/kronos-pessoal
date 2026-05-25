@@ -1,10 +1,10 @@
 import path from 'path';
 import { Router } from 'express';
-import { getSqliteBackupPath, listSqliteBackups, runSqliteBackup } from '../cron/backup';
+import { getSqliteBackupPath, listSqliteBackups, restoreSqliteBackup, runSqliteBackup } from '../cron/backup';
 import { requireApiAuth } from '../auth/auth';
 
 const router = Router();
-const BACKUP_PATTERN = /^kronos_backup_\d{4}-\d{2}-\d{2}\.sqlite$/;
+const BACKUP_PATTERN = /^(kronos_backup_\d{4}-\d{2}-\d{2}|before-restore-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})\.(sqlite|db)$/;
 
 router.use('/backups', requireApiAuth);
 
@@ -29,6 +29,27 @@ router.post('/backups/run', async (_req, res, next) => {
       },
     });
   } catch (err) { next(err); }
+});
+
+router.post('/backups/restore', async (req, res, next) => {
+  try {
+    const filename = typeof req.body?.filename === 'string' ? req.body.filename : '';
+    if (!BACKUP_PATTERN.test(filename) || path.basename(filename) !== filename || filename.includes('..')) {
+      return res.status(400).json({ error: 'Invalid backup filename' });
+    }
+
+    const result = await restoreSqliteBackup(filename);
+    return res.json({
+      ok: true,
+      restored_from: result.restored_from,
+      safety_backup: result.safety_backup,
+      message: 'Backup restaurado. Recarregue a página.',
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Could not restore backup';
+    const status = message === 'Backup not found' ? 404 : 400;
+    return res.status(status).json({ error: message });
+  }
 });
 
 router.get('/backups/:filename/download', (req, res) => {

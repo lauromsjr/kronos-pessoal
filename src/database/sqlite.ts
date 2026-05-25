@@ -27,6 +27,12 @@ export async function getDb(): Promise<KronosDb> {
   return connection;
 }
 
+export async function closeDb(): Promise<void> {
+  if (!connection) return;
+  await connection.close();
+  connection = null;
+}
+
 export async function initTaskSchema(): Promise<void> {
   const db = await getDb();
 

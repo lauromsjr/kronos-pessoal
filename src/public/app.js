@@ -970,6 +970,7 @@ function renderBackups() {
       <span class="backup-file">${escapeHtml(backup.filename)}</span>
       <span class="backup-meta">${formatBytes(backup.size_bytes)}${backup.created_at ? ` · ${formatDateTime(backup.created_at)}` : ''}</span>
       <a class="backup-download" href="/api/backups/${encodeURIComponent(backup.filename)}/download" target="_blank" rel="noopener">Baixar</a>
+      <button class="backup-restore" type="button" data-restore-backup="${escapeHtml(backup.filename)}">Restaurar</button>
     </div>
   `).join('');
 }
@@ -996,6 +997,33 @@ async function runManualBackup() {
     throw err;
   } finally {
     button.disabled = false;
+  }
+}
+
+async function restoreBackup(filename) {
+  const warning = 'Esta ação substituirá o banco atual por este backup. Antes disso, o Kronos criará um backup de segurança do estado atual.';
+  if (!confirm(`${warning}\n\nDeseja continuar?`)) return;
+
+  const typed = prompt('Digite RESTAURAR para confirmar a restauração segura.');
+  if (typed !== 'RESTAURAR') {
+    setBackupMessage('Restauração cancelada.', 'error');
+    return;
+  }
+
+  setBackupMessage('Restaurando backup com segurança...');
+  try {
+    const result = await api('/api/backups/restore', {
+      method: 'POST',
+      body: JSON.stringify({ filename }),
+    });
+    await loadBackups();
+    setBackupMessage(
+      `${result.message} Backup de segurança criado: ${result.safety_backup}. Recarregue a página para garantir que os dados atualizados sejam exibidos.`,
+      'success'
+    );
+  } catch (err) {
+    setBackupMessage('Não foi possível restaurar o backup. O banco atual foi preservado.', 'error');
+    throw err;
   }
 }
 
@@ -1726,6 +1754,12 @@ document.querySelector('#refreshBackupsBtn').addEventListener('click', async () 
 
 document.querySelector('#runBackupBtn').addEventListener('click', async () => {
   await runManualBackup();
+});
+
+document.querySelector('#backupList').addEventListener('click', async (e) => {
+  const button = e.target.closest('[data-restore-backup]');
+  if (!button) return;
+  await restoreBackup(button.dataset.restoreBackup);
 });
 
 document.querySelector('#refreshCalendarBtn').addEventListener('click', async () => {
