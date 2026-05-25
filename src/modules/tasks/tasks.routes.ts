@@ -5,6 +5,7 @@ import { requireApiAuth } from '../auth/auth';
 import { upsertTaskCalendarEvent } from '../calendar/googleCalendar';
 
 const router = Router();
+const recurrenceTypes = ['none', 'daily', 'weekly', 'monthly'] as const;
 
 const companies  = ['IbogaLiv', 'Olympus', 'PlugAI', 'Pessoal'] as const;
 const impacts    = ['Alto', 'Médio', 'Baixo'] as const;
@@ -41,6 +42,9 @@ const taskInput = z.object({
   sync_to_calendar: z.boolean().optional(),
   calendar_start_time: nullableCalendarStartTime,
   calendar_duration_min: nullableCalendarDuration,
+  recurrence_type: z.enum(recurrenceTypes).optional(),
+  recurrence_interval: z.number().int().min(1).max(30).optional(),
+  recurrence_next_date: nullableDueDate,
   notes:     z.string().nullable().optional(),
 });
 
@@ -83,6 +87,16 @@ export async function ensureSubtasksTable() {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function normalizeTask(input: z.infer<typeof taskInput>) {
+  const recurrenceType = input.recurrence_type || 'none';
+  const recurrenceInterval = recurrenceType === 'none' ? 1 : input.recurrence_interval || 1;
+  const recurrenceNextDate = recurrenceType === 'none'
+    ? null
+    : input.recurrence_next_date ?? calculateNextRecurrenceDate({
+        due_date: input.due_date ?? null,
+        recurrence_type: recurrenceType,
+        recurrence_interval: recurrenceInterval,
+      });
+
   return {
     title:     input.title,
     company:   input.company ?? null,
@@ -93,6 +107,9 @@ function normalizeTask(input: z.infer<typeof taskInput>) {
     sync_to_calendar: input.sync_to_calendar ? 1 : 0,
     calendar_start_time: input.calendar_start_time ?? null,
     calendar_duration_min: input.calendar_duration_min ?? null,
+    recurrence_type: recurrenceType,
+    recurrence_interval: recurrenceInterval,
+    recurrence_next_date: recurrenceNextDate,
     notes:     input.notes     || '',
   };
 }
@@ -116,7 +133,7 @@ async function applyStatusChange(taskId: number, nextStatus: string) {
     updates.push('started_at = CURRENT_TIMESTAMP');
   }
 
-  if (nextStatus === 'Concluída') {
+  if (nextStatus === statuses[2]) {
     updates.push('completed_at = CURRENT_TIMESTAMP');
     if (current.started_at) {
       updates.push("duration_min = CAST((julianday(CURRENT_TIMESTAMP) - julianday(started_at)) * 24 * 60 AS INTEGER)");
@@ -130,6 +147,11 @@ async function applyStatusChange(taskId: number, nextStatus: string) {
       'INSERT INTO task_status_history (task_id, from_status, to_status) VALUES (?, ?, ?)',
       taskId, current.status, nextStatus
     );
+
+    if (nextStatus === statuses[2]) {
+      const completedTask = await db.get('SELECT * FROM tasks WHERE id = ?', taskId);
+      await createNextRecurringOccurrence(db, completedTask);
+    }
   }
 
   return db.get('SELECT * FROM tasks WHERE id = ?', taskId);
@@ -195,6 +217,88 @@ function addDays(date: string, days: number) {
     month: '2-digit',
     day: '2-digit',
   }).format(next);
+}
+
+function addMonths(date: string, months: number) {
+  const next = new Date(`${date}T12:00:00-03:00`);
+  next.setMonth(next.getMonth() + months);
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(next);
+}
+
+function calculateNextRecurrenceDate(task: {
+  due_date?: string | null;
+  recurrence_type?: string | null;
+  recurrence_interval?: number | null;
+}) {
+  const type = task.recurrence_type || 'none';
+  const interval = Math.min(30, Math.max(1, Number(task.recurrence_interval || 1)));
+  const baseDate = task.due_date || todayInSaoPaulo();
+
+  if (type === 'daily') return addDays(baseDate, interval);
+  if (type === 'weekly') return addDays(baseDate, interval * 7);
+  if (type === 'monthly') return addMonths(baseDate, interval);
+  return null;
+}
+
+async function createNextRecurringOccurrence(db: Awaited<ReturnType<typeof getDb>>, task: any) {
+  if (!task || task.recurrence_type === 'none') return null;
+
+  const nextDate = task.recurrence_next_date || calculateNextRecurrenceDate(task);
+  if (!nextDate) return null;
+
+  const recurringParentId = task.recurring_parent_id || task.id;
+  const existing = await db.get(
+    `SELECT id FROM tasks
+     WHERE recurring_parent_id = ?
+       AND title = ?
+       AND due_date = ?
+       AND recurrence_type = ?
+       AND status != ?
+     LIMIT 1`,
+    recurringParentId,
+    task.title,
+    nextDate,
+    task.recurrence_type,
+    statuses[2]
+  );
+  if (existing) return existing;
+
+  const followingDate = calculateNextRecurrenceDate({
+    ...task,
+    due_date: nextDate,
+  });
+
+  const result = await db.run(
+    `INSERT INTO tasks (
+      title, company, impact, list_type, status, due_date,
+      sync_to_calendar, calendar_start_time, calendar_duration_min,
+      recurrence_type, recurrence_interval, recurrence_next_date, recurring_parent_id,
+      notes
+    ) VALUES (?, ?, ?, ?, 'A fazer', ?, 0, NULL, NULL, ?, ?, ?, ?, ?)`,
+    task.title,
+    task.company ?? null,
+    task.impact,
+    task.list_type,
+    nextDate,
+    task.recurrence_type,
+    task.recurrence_interval || 1,
+    followingDate,
+    recurringParentId,
+    task.notes || ''
+  );
+
+  await db.run(
+    'INSERT INTO task_status_history (task_id, from_status, to_status) VALUES (?, NULL, ?)',
+    result.lastID,
+    'A fazer'
+  );
+
+  return db.get('SELECT * FROM tasks WHERE id = ?', result.lastID);
 }
 
 async function getTodayBucket(
@@ -443,10 +547,12 @@ router.post('/tasks', async (req, res, next) => {
     const result = await db.run(
       `INSERT INTO tasks (
         title, company, impact, list_type, status, due_date,
-        sync_to_calendar, calendar_start_time, calendar_duration_min, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        sync_to_calendar, calendar_start_time, calendar_duration_min,
+        recurrence_type, recurrence_interval, recurrence_next_date, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       task.title, task.company, task.impact, task.list_type, task.status, task.due_date,
-      task.sync_to_calendar, task.calendar_start_time, task.calendar_duration_min, task.notes
+      task.sync_to_calendar, task.calendar_start_time, task.calendar_duration_min,
+      task.recurrence_type, task.recurrence_interval, task.recurrence_next_date, task.notes
     );
 
     await db.run(
@@ -470,6 +576,26 @@ router.put('/tasks/:id', async (req, res, next) => {
     const current = await db.get('SELECT * FROM tasks WHERE id = ?', id);
     if (!current) return res.status(404).json({ error: 'Task not found' });
 
+    if (
+      'recurrence_type' in parsed ||
+      'recurrence_interval' in parsed ||
+      'recurrence_next_date' in parsed ||
+      'due_date' in parsed
+    ) {
+      const recurrenceType = parsed.recurrence_type ?? current.recurrence_type ?? 'none';
+      if (recurrenceType === 'none') {
+        parsed.recurrence_interval = 1;
+        parsed.recurrence_next_date = null;
+      } else {
+        parsed.recurrence_interval = parsed.recurrence_interval ?? current.recurrence_interval ?? 1;
+        parsed.recurrence_next_date = parsed.recurrence_next_date ?? calculateNextRecurrenceDate({
+          due_date: parsed.due_date ?? current.due_date ?? null,
+          recurrence_type: recurrenceType,
+          recurrence_interval: parsed.recurrence_interval,
+        });
+      }
+    }
+
     const fields = [
       'title',
       'company',
@@ -479,6 +605,9 @@ router.put('/tasks/:id', async (req, res, next) => {
       'sync_to_calendar',
       'calendar_start_time',
       'calendar_duration_min',
+      'recurrence_type',
+      'recurrence_interval',
+      'recurrence_next_date',
       'notes',
     ] as const;
     const updates: string[] = [];
@@ -489,7 +618,7 @@ router.put('/tasks/:id', async (req, res, next) => {
         updates.push(`${field} = ?`);
         if (field === 'sync_to_calendar') {
           values.push(parsed[field] ? 1 : 0);
-        } else if (field === 'company' || field === 'due_date' || field === 'calendar_start_time' || field === 'calendar_duration_min') {
+        } else if (field === 'company' || field === 'due_date' || field === 'calendar_start_time' || field === 'calendar_duration_min' || field === 'recurrence_next_date') {
           values.push(parsed[field] ?? null);
         } else {
           values.push(parsed[field] ?? '');

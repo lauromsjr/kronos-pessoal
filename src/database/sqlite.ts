@@ -77,4 +77,16 @@ export async function initTaskSchema(): Promise<void> {
   if (!columns.some((column) => column.name === 'calendar_duration_min')) {
     await db.exec('ALTER TABLE tasks ADD COLUMN calendar_duration_min INTEGER NULL;');
   }
+  if (!columns.some((column) => column.name === 'recurrence_type')) {
+    await db.exec("ALTER TABLE tasks ADD COLUMN recurrence_type TEXT NOT NULL DEFAULT 'none';");
+  }
+  if (!columns.some((column) => column.name === 'recurrence_interval')) {
+    await db.exec('ALTER TABLE tasks ADD COLUMN recurrence_interval INTEGER NOT NULL DEFAULT 1;');
+  }
+  if (!columns.some((column) => column.name === 'recurrence_next_date')) {
+    await db.exec('ALTER TABLE tasks ADD COLUMN recurrence_next_date TEXT NULL;');
+  }
+  if (!columns.some((column) => column.name === 'recurring_parent_id')) {
+    await db.exec('ALTER TABLE tasks ADD COLUMN recurring_parent_id INTEGER NULL;');
+  }
 }

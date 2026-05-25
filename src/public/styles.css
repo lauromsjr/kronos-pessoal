@@ -1213,6 +1213,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold); }
 .chip-impact-alto  { border-color: rgba(220,38,38,0.3);  color: #DC2626; background: #FEF2F2; }
 .chip-impact-medio { border-color: rgba(217,119,6,0.3);  color: #D97706; background: #FFFBEB; }
 .chip-impact-baixo { border-color: rgba(22,163,74,0.3);  color: #16A34A; background: #F0FDF4; }
+.recurrence-chip { border-color: rgba(26,54,93,0.18); color: var(--navy); background: #F8FAFC; }
 
 .elapsed { color: var(--gold); font-size: 0.7rem; font-weight: 700; }
 
@@ -1398,6 +1399,38 @@ dialog::backdrop {
   background: var(--panel-2);
   padding: 12px 14px;
 }
+
+.recurrence-section {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+  padding: 12px 14px;
+}
+
+.recurrence-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.recurrence-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  gap: 10px;
+}
+
+.recurrence-note {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.recurrence-note.warn { color: var(--warn); }
+.recurrence-note.success { color: var(--success); }
 
 .calendar-sync-head {
   display: flex;
@@ -1842,7 +1875,9 @@ dialog::backdrop {
   .app-nav-btn { flex: 1 0 auto; min-width: 138px; }
   .calendar-sync-head { display: grid; }
   .calendar-sync-fields { grid-template-columns: 1fr; }
+  .recurrence-fields { grid-template-columns: 1fr; }
   .calendar-sync-section,
+  .recurrence-section,
   .subtasks-section,
   .today-panel,
   .daily-review-card,

@@ -45,6 +45,9 @@ const fields = {
   list:    document.querySelector('#listInput'),
   status:  document.querySelector('#statusInput'),
   dueDate: document.querySelector('#dueDateInput'),
+  recurrenceType: document.querySelector('#recurrenceTypeInput'),
+  recurrenceInterval: document.querySelector('#recurrenceIntervalInput'),
+  recurrenceNextDate: document.querySelector('#recurrenceNextDateInput'),
   syncCalendar: document.querySelector('#syncCalendarInput'),
   calendarStartTime: document.querySelector('#calendarStartTimeInput'),
   calendarDuration: document.querySelector('#calendarDurationInput'),
@@ -305,6 +308,42 @@ function dueDateText(dueDate) {
   return `${label}: ${formatDate(dueDate)}`;
 }
 
+function recurrenceLabel(type) {
+  if (type === 'daily') return 'diaria';
+  if (type === 'weekly') return 'semanal';
+  if (type === 'monthly') return 'mensal';
+  return '';
+}
+
+function recurrenceChip(task) {
+  const label = recurrenceLabel(task.recurrence_type);
+  return label ? `<span class="chip recurrence-chip">Recorrente: ${label}</span>` : '';
+}
+
+function addMonthsToDate(dateStr, months) {
+  const date = new Date(`${dateStr}T12:00:00`);
+  date.setMonth(date.getMonth() + months);
+  return dateKeySaoPaulo(date);
+}
+
+function addDays(dateStr, days) {
+  const date = new Date(`${dateStr}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return dateKeySaoPaulo(date);
+}
+
+function calculateRecurrenceNextDate() {
+  const type = fields.recurrenceType.value;
+  if (type === 'none') return '';
+
+  const interval = Math.min(30, Math.max(1, Number(fields.recurrenceInterval.value || 1)));
+  const base = fields.dueDate.value || dateKeySaoPaulo(new Date());
+  if (type === 'daily') return addDays(base, interval);
+  if (type === 'weekly') return addDays(base, interval * 7);
+  if (type === 'monthly') return addMonthsToDate(base, interval);
+  return '';
+}
+
 function taskCompanyBadge(task) {
   return `<span class="badge ${companyClass(task.company)}">${companyLabel(task.company)}</span>`;
 }
@@ -372,6 +411,7 @@ function setTodayCollapsed(collapsed) {
 
 function renderTodayItem(task) {
   const due = task.due_date ? `<span class="today-due ${dueDateClass(task.due_date)}">${dueDateText(task.due_date)}</span>` : '';
+  const recurrence = recurrenceChip(task);
   return `
     <article class="today-task">
       <h3>${escapeHtml(task.title)}</h3>
@@ -380,6 +420,7 @@ function renderTodayItem(task) {
         ${taskImpactChip(task)}
         <span class="chip">${task.status}</span>
         ${due}
+        ${recurrence}
       </div>
       <button class="btn-edit" type="button" data-open-id="${task.id}">Abrir</button>
     </article>
@@ -887,6 +928,30 @@ function updateCalendarSyncFields() {
   note.className = 'calendar-sync-note';
 }
 
+function updateRecurrenceFields() {
+  const type = fields.recurrenceType.value;
+  const enabled = type !== 'none';
+  const note = document.querySelector('#recurrenceNote');
+
+  fields.recurrenceInterval.disabled = !enabled;
+  fields.recurrenceNextDate.value = enabled ? calculateRecurrenceNextDate() : '';
+
+  if (!enabled) {
+    note.textContent = 'Ao concluir, a tarefa sera encerrada normalmente.';
+    note.className = 'recurrence-note';
+    return;
+  }
+
+  if (!fields.dueDate.value) {
+    note.textContent = 'Defina um prazo para calcular a proxima ocorrencia.';
+    note.className = 'recurrence-note warn';
+    return;
+  }
+
+  note.textContent = `Ao concluir, uma nova tarefa sera criada para ${formatDate(fields.recurrenceNextDate.value)}.`;
+  note.className = 'recurrence-note success';
+}
+
 function setBackupMessage(message, type = '') {
   const el = document.querySelector('#backupMessage');
   el.textContent = message;
@@ -1007,6 +1072,7 @@ function renderTaskCard(task, index, isConcluida) {
   const company = companyLabel(task.company);
   const badgeClass = companyClass(task.company);
   const dueHtml = task.due_date ? `<span class="due-date ${dueDateClass(task.due_date)}">${dueDateText(task.due_date)}</span>` : '';
+  const recurrenceHtml = recurrenceChip(task);
 
   // Barra de progresso de subtarefas
   const total = task.subtasks_total || 0;
@@ -1034,6 +1100,7 @@ function renderTaskCard(task, index, isConcluida) {
         <div class="task-meta">
           <span class="badge ${badgeClass}">${company}</span>
           <span class="chip ${impactCls}">${task.impact}</span>
+          ${recurrenceHtml}
         </div>
         <h3>${escapeHtml(task.title)}</h3>
         ${dueHtml}
@@ -1054,6 +1121,7 @@ function renderTaskCard(task, index, isConcluida) {
         <span class="badge ${badgeClass}">${company}</span>
         <span class="chip ${impactCls}">${task.impact}</span>
         <span class="chip">${task.status}</span>
+        ${recurrenceHtml}
         <span class="task-age ${cls}" title="${ageTitle}">
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0">
             <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
@@ -1119,6 +1187,7 @@ function renderKanbanCard(task, index) {
   const company = companyLabel(task.company);
   const badgeClass = companyClass(task.company);
   const dueHtml = task.due_date ? `<span class="due-date ${dueDateClass(task.due_date)}">${dueDateText(task.due_date)}</span>` : '';
+  const recurrenceHtml = recurrenceChip(task);
 
   const total = task.subtasks_total || 0;
   const done  = task.subtasks_done  || 0;
@@ -1144,6 +1213,7 @@ function renderKanbanCard(task, index) {
       <div class="task-meta">
         <span class="badge ${badgeClass}">${company}</span>
         <span class="chip ${impactCls}">${task.impact}</span>
+        ${recurrenceHtml}
         <span class="task-age ${cls}" title="${ageTitle}">
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0">
             <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
@@ -1474,6 +1544,9 @@ function resetForm() {
   fields.list.value    = state.list === 'Concluida' ? 'Tarefa' : state.list;
   fields.status.value  = 'A fazer';
   fields.dueDate.value = '';
+  fields.recurrenceType.value = 'none';
+  fields.recurrenceInterval.value = '1';
+  fields.recurrenceNextDate.value = '';
   fields.syncCalendar.checked = false;
   fields.calendarStartTime.value = '09:00';
   fields.calendarDuration.value = '60';
@@ -1487,6 +1560,7 @@ function resetForm() {
   currentSubtasks = [];
   currentTaskId   = null;
   updateCalendarSyncFields();
+  updateRecurrenceFields();
 }
 
 async function openTask(id) {
@@ -1500,6 +1574,9 @@ async function openTask(id) {
   fields.list.value    = task.list_type;
   fields.status.value  = task.status;
   fields.dueDate.value = task.due_date || '';
+  fields.recurrenceType.value = task.recurrence_type || 'none';
+  fields.recurrenceInterval.value = String(task.recurrence_interval || 1);
+  fields.recurrenceNextDate.value = task.recurrence_next_date || '';
   fields.syncCalendar.checked = Boolean(task.sync_to_calendar);
   fields.calendarStartTime.value = task.calendar_start_time || '09:00';
   fields.calendarDuration.value = String(task.calendar_duration_min || 60);
@@ -1522,6 +1599,7 @@ async function openTask(id) {
   currentSubtasks = task.subtasks || [];
   renderSubtaskList();
   updateCalendarSyncFields();
+  updateRecurrenceFields();
   if (task.google_event_id) {
     const note = document.querySelector('#calendarSyncNote');
     note.textContent = 'Sincronizada com Google Agenda.';
@@ -1540,6 +1618,9 @@ async function saveTask(event) {
     list_type: fields.list.value,
     status:    fields.status.value,
     due_date:  fields.dueDate.value || null,
+    recurrence_type: fields.recurrenceType.value,
+    recurrence_interval: fields.recurrenceType.value === 'none' ? 1 : Number(fields.recurrenceInterval.value || 1),
+    recurrence_next_date: fields.recurrenceType.value === 'none' ? null : fields.recurrenceNextDate.value || null,
     sync_to_calendar: fields.syncCalendar.checked,
     calendar_start_time: fields.syncCalendar.checked ? fields.calendarStartTime.value || '09:00' : null,
     calendar_duration_min: fields.syncCalendar.checked ? Number(fields.calendarDuration.value || 60) : null,
@@ -1726,7 +1807,12 @@ loginForm.addEventListener('submit', submitLogin);
 document.querySelector('#logoutBtn').addEventListener('click', logout);
 
 fields.syncCalendar.addEventListener('change', updateCalendarSyncFields);
-fields.dueDate.addEventListener('change', updateCalendarSyncFields);
+fields.dueDate.addEventListener('change', () => {
+  updateCalendarSyncFields();
+  updateRecurrenceFields();
+});
+fields.recurrenceType.addEventListener('change', updateRecurrenceFields);
+fields.recurrenceInterval.addEventListener('input', updateRecurrenceFields);
 
 board.addEventListener('change', async (e) => {
   const id = e.target.dataset.statusId;
