@@ -15,6 +15,7 @@ const state = {
   stats:     null,
   today:      null,
   dailyReview: null,
+  dailyReviewHistory: [],
   todayCollapsed: localStorage.getItem('Kronos_TODAY_COLLAPSED') === 'true',
   activeView: 'execution',
   backupsLoaded: false,
@@ -530,6 +531,81 @@ async function loadDailyReview() {
   renderDailyReview();
 }
 
+function reviewPriorityTasks(review) {
+  const ids = review?.selected_priority_task_ids || [];
+  return ids.map((id) => taskById(id) || { id, title: `Tarefa #${id}`, company: null, impact: '-', status: '-' });
+}
+
+function reviewSummaryText(review) {
+  if (review.summary) return review.summary;
+  if (review.blockers) return `Bloqueios: ${review.blockers}`;
+  if (review.tomorrow_focus) return `Foco: ${review.tomorrow_focus}`;
+  return 'Sem resumo registrado.';
+}
+
+function renderDailyReviewHistory() {
+  const list = document.querySelector('#dailyHistoryList');
+  if (!list) return;
+
+  list.innerHTML = state.dailyReviewHistory.length
+    ? state.dailyReviewHistory.map((review) => `
+      <article class="daily-history-item">
+        <div class="daily-history-item-main">
+          <div class="daily-history-item-head">
+            <strong>${formatDate(review.review_date)}</strong>
+            <span class="daily-review-status" data-status="${review.status}">${dailyReviewStatusLabel(review.status)}</span>
+          </div>
+          <p>${escapeHtml(reviewSummaryText(review))}</p>
+          ${review.blockers ? `<small><strong>Bloqueios:</strong> ${escapeHtml(review.blockers)}</small>` : ''}
+          ${review.tomorrow_focus ? `<small><strong>Foco de amanha:</strong> ${escapeHtml(review.tomorrow_focus)}</small>` : ''}
+        </div>
+        <button class="btn-secondary" type="button" data-review-date="${review.review_date}">Abrir</button>
+      </article>
+    `).join('')
+    : '<p class="daily-empty">Nenhum registro diario encontrado.</p>';
+}
+
+async function loadDailyReviewHistory() {
+  const result = await api('/api/daily-review/history?limit=14');
+  state.dailyReviewHistory = result.data || [];
+  renderDailyReviewHistory();
+}
+
+function openDailyReviewHistoryDetail(review) {
+  const priorities = reviewPriorityTasks(review);
+  const detail = document.querySelector('#dailyHistoryDetail');
+  document.querySelector('#dailyHistoryModalTitle').textContent = `Registro de ${formatDate(review.review_date)}`;
+  detail.innerHTML = `
+    <div class="detail-row">
+      <span class="detail-label">Status</span>
+      <strong>${dailyReviewStatusLabel(review.status)}</strong>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Prioridades escolhidas</span>
+      ${priorities.length
+        ? `<div class="daily-priority-pills">${priorities.map(task => `<span>${escapeHtml(task.title)}</span>`).join('')}</div>`
+        : '<p class="daily-empty">Nenhuma prioridade registrada.</p>'}
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Resumo</span>
+      <p>${escapeHtml(review.summary || 'Sem resumo registrado.')}</p>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Bloqueios / pendencias</span>
+      <p>${escapeHtml(review.blockers || 'Sem bloqueios registrados.')}</p>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Foco de amanha</span>
+      <p>${escapeHtml(review.tomorrow_focus || 'Sem foco registrado.')}</p>
+    </div>
+    <div class="daily-history-times">
+      <span><strong>Inicio:</strong> ${review.started_at ? formatDateTime(review.started_at) : '-'}</span>
+      <span><strong>Encerramento:</strong> ${review.ended_at ? formatDateTime(review.ended_at) : '-'}</span>
+    </div>
+  `;
+  document.querySelector('#dailyHistoryModal').showModal();
+}
+
 function renderStartDayOptions() {
   const selected = new Set(state.dailyReview?.selected_priority_task_ids || []);
   const candidates = dailyCandidateTasks();
@@ -572,6 +648,7 @@ async function saveStartDay(event) {
   state.dailyReview = result.data || result;
   document.querySelector('#startDayModal').close();
   renderDailyReview();
+  await loadDailyReviewHistory();
 }
 
 async function completedTasksToday() {
@@ -613,6 +690,7 @@ async function saveCloseDay(event) {
   state.dailyReview = result.data || result;
   document.querySelector('#closeDayModal').close();
   renderDailyReview();
+  await loadDailyReviewHistory();
 }
 
 function renderCalendarStatus() {
@@ -1160,6 +1238,7 @@ async function loadTasks() {
   await loadStats();
   await loadToday();
   await loadDailyReview();
+  await loadDailyReviewHistory();
   updateMetrics();
 
   const isConcluida = state.list === 'Concluida';
@@ -1506,8 +1585,25 @@ document.querySelector('#closeStartDayBtn').addEventListener('click', () => docu
 document.querySelector('#cancelStartDayBtn').addEventListener('click', () => document.querySelector('#startDayModal').close());
 document.querySelector('#closeCloseDayBtn').addEventListener('click', () => document.querySelector('#closeDayModal').close());
 document.querySelector('#cancelCloseDayBtn').addEventListener('click', () => document.querySelector('#closeDayModal').close());
+document.querySelector('#closeDailyHistoryBtn').addEventListener('click', () => document.querySelector('#dailyHistoryModal').close());
+document.querySelector('#doneDailyHistoryBtn').addEventListener('click', () => document.querySelector('#dailyHistoryModal').close());
+document.querySelector('#refreshDailyHistoryBtn').addEventListener('click', async () => {
+  await loadDailyReviewHistory();
+});
 document.querySelector('#startDayForm').addEventListener('submit', saveStartDay);
 document.querySelector('#closeDayForm').addEventListener('submit', saveCloseDay);
+
+document.querySelector('#dailyHistoryList').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-review-date]');
+  if (!btn) return;
+
+  try {
+    const review = await api(`/api/daily-review/${btn.dataset.reviewDate}`);
+    openDailyReviewHistoryDetail(review.data || review);
+  } catch (err) {
+    alert('Registro diario nao encontrado.');
+  }
+});
 
 document.querySelector('#startPriorityList').addEventListener('change', (e) => {
   const checked = [...document.querySelectorAll('#startPriorityList input:checked')];

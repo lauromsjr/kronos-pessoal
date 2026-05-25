@@ -15,6 +15,8 @@ const closeInput = z.object({
   tomorrow_focus: z.string().trim().max(5000).optional().default(''),
 });
 
+const dateParam = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
 export async function ensureDailyReviewTable() {
   const db = await getDb();
   await db.exec(`
@@ -68,10 +70,14 @@ function normalizeDailyReview(row: any, reviewDate = todayInSaoPaulo()) {
     selectedPriorityTaskIds = [];
   }
 
+  const status = ['not_started', 'started', 'closed'].includes(row.status)
+    ? row.status
+    : 'not_started';
+
   return {
     id: row.id,
     review_date: row.review_date,
-    status: row.status || 'not_started',
+    status,
     selected_priority_task_ids: selectedPriorityTaskIds,
     started_at: row.started_at || null,
     ended_at: row.ended_at || null,
@@ -95,6 +101,48 @@ router.get('/daily-review/today', async (_req, res, next) => {
     const reviewDate = todayInSaoPaulo();
     const row = await getReviewByDate(reviewDate);
     res.json(normalizeDailyReview(row, reviewDate));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/daily-review/history', async (req, res, next) => {
+  try {
+    const requestedLimit = Number(req.query.limit || 14);
+    const requestedOffset = Number(req.query.offset || 0);
+    const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : 14, 1), 60);
+    const offset = Math.max(Number.isFinite(requestedOffset) ? Math.floor(requestedOffset) : 0, 0);
+    const db = await getDb();
+
+    const rows = await db.all(
+      `SELECT * FROM daily_reviews
+       ORDER BY review_date DESC
+       LIMIT ? OFFSET ?`,
+      limit + 1,
+      offset
+    );
+
+    res.json({
+      data: rows.slice(0, limit).map((row) => normalizeDailyReview(row)),
+      pagination: {
+        limit,
+        offset,
+        has_more: rows.length > limit,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/daily-review/:date', async (req, res, next) => {
+  try {
+    const reviewDate = dateParam.parse(req.params.date);
+    const row = await getReviewByDate(reviewDate);
+    if (!row) {
+      return res.status(404).json({ error: 'Daily review not found' });
+    }
+    return res.json(normalizeDailyReview(row, reviewDate));
   } catch (err) {
     next(err);
   }
