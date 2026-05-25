@@ -112,6 +112,18 @@
           </div>
         </section>
 
+        <section class="daily-history-card" id="dailyHistoryCard" aria-label="Historico diario">
+          <div class="daily-history-head">
+            <div>
+              <span class="metric-label">Historico diario</span>
+              <h2>Registros recentes</h2>
+              <p>Consulta somente leitura das rotinas anteriores.</p>
+            </div>
+            <button class="btn-secondary" id="refreshDailyHistoryBtn" type="button">Atualizar historico</button>
+          </div>
+          <div class="daily-history-list" id="dailyHistoryList"></div>
+        </section>
+
         <!-- TOOLBAR -->
         <section class="toolbar" aria-label="Filtros">
           <nav class="tabs" aria-label="Listas">
@@ -348,6 +360,19 @@
           <button class="btn-danger" id="deleteBtn" type="button" hidden>Excluir</button>
           <button class="btn-secondary" id="cancelBtn" type="button">Cancelar</button>
           <button class="btn-primary" type="submit">Salvar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="dailyHistoryModal">
+      <form class="modal daily-modal" method="dialog">
+        <div class="modal-head">
+          <h2 id="dailyHistoryModalTitle">Registro diario</h2>
+          <button class="btn-icon" id="closeDailyHistoryBtn" type="button" aria-label="Fechar">x</button>
+        </div>
+        <section class="daily-history-detail" id="dailyHistoryDetail"></section>
+        <div class="modal-actions">
+          <button class="btn-primary" id="doneDailyHistoryBtn" type="button">Fechar</button>
         </div>
       </form>
     </dialog>

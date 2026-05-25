@@ -644,6 +644,92 @@ h2, h3 { font-family: var(--font-title); }
   line-height: 1.35;
 }
 
+.daily-history-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 16px;
+  margin-bottom: 18px;
+}
+
+.daily-history-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.daily-history-head h2 {
+  color: var(--navy);
+  font-size: 1rem;
+  font-weight: 900;
+  margin-top: 4px;
+}
+
+.daily-history-head p {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.daily-history-list {
+  display: grid;
+  gap: 8px;
+}
+
+.daily-history-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  padding: 10px;
+}
+
+.daily-history-item-main {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.daily-history-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.daily-history-item strong {
+  color: var(--navy);
+  font-family: var(--font-title);
+}
+
+.daily-history-item p,
+.daily-history-item small,
+.daily-history-detail p,
+.daily-history-times {
+  color: var(--text-mid);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.daily-history-detail {
+  display: grid;
+  gap: 12px;
+}
+
+.daily-history-times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
 /* ── BACKUPS ── */
 .backup-panel {
   display: grid;
@@ -1652,9 +1738,14 @@ dialog::backdrop {
   .subtasks-section,
   .today-panel,
   .daily-review-card,
+  .daily-history-card,
   .backup-panel,
   .settings-card { padding: 14px; }
   .daily-review-head { display: grid; gap: 10px; }
+  .daily-history-head { display: grid; gap: 10px; }
+  .daily-history-head .btn-secondary { width: 100%; }
+  .daily-history-item { grid-template-columns: 1fr; }
+  .daily-history-item .btn-secondary { width: 100%; }
   .daily-review-actions { justify-content: stretch; display: grid; grid-template-columns: 1fr; }
   .daily-review-actions button { flex: 1; }
   .daily-modal {
