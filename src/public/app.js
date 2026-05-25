@@ -1543,6 +1543,15 @@ async function loadMoreCompleted() {
 let currentSubtasks = [];
 let currentTaskId   = null;
 
+function updateCompleteTaskButton() {
+  const button = document.querySelector('#completeTaskBtn');
+  if (!button) return;
+
+  const shouldShow = Boolean(currentTaskId) && fields.status.value !== 'Concluída';
+  button.hidden = !shouldShow;
+  button.disabled = !shouldShow;
+}
+
 function renderSubtaskList() {
   const ul = document.querySelector('#subtaskList');
   const countEl = document.querySelector('#subtasksCount');
@@ -1655,6 +1664,7 @@ function resetForm() {
   document.querySelector('#newSubtaskDueDateInput').value = '';
   currentSubtasks = [];
   currentTaskId   = null;
+  updateCompleteTaskButton();
   updateCalendarSyncFields();
   updateRecurrenceFields();
 }
@@ -1694,6 +1704,7 @@ async function openTask(id) {
   currentTaskId = task.id;
   currentSubtasks = task.subtasks || [];
   renderSubtaskList();
+  updateCompleteTaskButton();
   updateCalendarSyncFields();
   updateRecurrenceFields();
   if (task.google_event_id) {
@@ -1761,6 +1772,23 @@ document.querySelector('#addTaskBtn').addEventListener('click', () => {
 
 document.querySelector('#closeModalBtn').addEventListener('click', () => modal.close());
 document.querySelector('#cancelBtn').addEventListener('click',    () => modal.close());
+document.querySelector('#completeTaskBtn').addEventListener('click', async () => {
+  if (!currentTaskId) return;
+  if (!confirm('Marcar esta tarefa como concluída?')) return;
+
+  try {
+    await api(`/api/tasks/${currentTaskId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'Concluída' }),
+    });
+    modal.close();
+    await loadTasks();
+  } catch (err) {
+    console.error('Erro ao concluir tarefa pelo modal:', err);
+    alert('Não foi possível concluir a tarefa. Recarregando dados...');
+    await loadTasks();
+  }
+});
 
 document.querySelector('#deleteBtn').addEventListener('click', async () => {
   if (!fields.id.value) return;
@@ -1914,6 +1942,7 @@ loginForm.addEventListener('submit', submitLogin);
 document.querySelector('#logoutBtn').addEventListener('click', logout);
 
 fields.syncCalendar.addEventListener('change', updateCalendarSyncFields);
+fields.status.addEventListener('change', updateCompleteTaskButton);
 fields.dueDate.addEventListener('change', () => {
   updateCalendarSyncFields();
   updateRecurrenceFields();

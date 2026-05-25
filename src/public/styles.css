@@ -1405,6 +1405,23 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold); }
 
 .btn-icon:hover { border-color: var(--danger); color: var(--danger); }
 
+.btn-complete {
+  border: 1px solid rgba(22,163,74,0.25);
+  border-radius: 8px;
+  padding: 7px 11px;
+  background: #F0FDF4;
+  color: #166534;
+  font-size: 0.74rem;
+  font-weight: 700;
+  transition: border-color 0.15s, background-color 0.15s, color 0.15s;
+}
+
+.btn-complete:hover {
+  border-color: rgba(22,163,74,0.45);
+  background: #DCFCE7;
+  color: #14532D;
+}
+
 /* ── MODAL ── */
 dialog {
   width: min(640px, calc(100% - 24px));
@@ -1433,6 +1450,12 @@ dialog::backdrop {
 }
 
 .modal-head h2 { font-size: 1rem; font-weight: 700; color: var(--navy); }
+
+.modal-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
 .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
 
@@ -2018,6 +2041,14 @@ dialog::backdrop {
     top: -16px;
     z-index: 2;
     background: var(--panel);
+  }
+  .modal-head-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .btn-complete {
+    min-height: 34px;
+    white-space: nowrap;
   }
   .modal-actions {
     position: sticky;
