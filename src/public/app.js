@@ -17,6 +17,7 @@ const state = {
   dailyReview: null,
   dailyReviewHistory: [],
   weeklyReport: null,
+  aiPrioritySuggestions: {},
   todayCollapsed: localStorage.getItem('Kronos_TODAY_COLLAPSED') === 'true',
   activeView: 'execution',
   backupsLoaded: false,
@@ -754,6 +755,7 @@ function renderStartDayOptions() {
         <span>
           <strong>${escapeHtml(task.title)}</strong>
           <small>${companyLabel(task.company)} · ${task.impact} · ${task.status}</small>
+          ${state.aiPrioritySuggestions[task.id] ? `<em class="daily-ai-reason">${escapeHtml(state.aiPrioritySuggestions[task.id])}</em>` : ''}
         </span>
       </label>
     `).join('')
@@ -767,9 +769,49 @@ function renderStartDayOptions() {
     : '<p class="daily-empty">Nenhum compromisso hoje.</p>';
 }
 
+function updateStartDayCount() {
+  document.querySelector('#startDayCount').textContent =
+    `${document.querySelectorAll('#startPriorityList input:checked').length}/3 prioridades selecionadas`;
+}
+
 function openStartDayModal() {
+  state.aiPrioritySuggestions = {};
+  document.querySelector('#aiPriorityMessage').textContent = '';
   renderStartDayOptions();
   document.querySelector('#startDayModal').showModal();
+}
+
+async function suggestPrioritiesWithAi() {
+  const button = document.querySelector('#suggestPrioritiesBtn');
+  const message = document.querySelector('#aiPriorityMessage');
+  button.disabled = true;
+  message.textContent = 'Gerando sugestões...';
+
+  try {
+    const candidates = dailyCandidateTasks();
+    const result = await api('/api/daily-review/suggest-priorities', {
+      method: 'POST',
+      body: JSON.stringify({ task_ids: candidates.map((task) => task.id) }),
+    });
+
+    state.aiPrioritySuggestions = {};
+    (result.suggestions || []).slice(0, 3).forEach((suggestion) => {
+      state.aiPrioritySuggestions[suggestion.task_id] = suggestion.reason;
+    });
+
+    renderStartDayOptions();
+    document.querySelectorAll('#startPriorityList input').forEach((input) => {
+      input.checked = Boolean(state.aiPrioritySuggestions[Number(input.value)]);
+    });
+    updateStartDayCount();
+    message.textContent = Object.keys(state.aiPrioritySuggestions).length
+      ? 'Sugestões aplicadas. Ajuste antes de salvar.'
+      : 'A IA não encontrou prioridades claras.';
+  } catch (err) {
+    message.textContent = err.message === 'IA não configurada.' ? 'IA não configurada.' : 'Não foi possível gerar sugestões.';
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function saveStartDay(event) {
@@ -1798,6 +1840,9 @@ document.querySelector('#closeCloseDayBtn').addEventListener('click', () => docu
 document.querySelector('#cancelCloseDayBtn').addEventListener('click', () => document.querySelector('#closeDayModal').close());
 document.querySelector('#closeDailyHistoryBtn').addEventListener('click', () => document.querySelector('#dailyHistoryModal').close());
 document.querySelector('#doneDailyHistoryBtn').addEventListener('click', () => document.querySelector('#dailyHistoryModal').close());
+document.querySelector('#suggestPrioritiesBtn').addEventListener('click', async () => {
+  await suggestPrioritiesWithAi();
+});
 document.querySelector('#refreshDailyHistoryBtn').addEventListener('click', async () => {
   await loadDailyReviewHistory();
 });
@@ -1825,8 +1870,7 @@ document.querySelector('#startPriorityList').addEventListener('change', (e) => {
     e.target.checked = false;
     alert('Escolha no máximo 3 prioridades.');
   }
-  document.querySelector('#startDayCount').textContent =
-    `${document.querySelectorAll('#startPriorityList input:checked').length}/3 prioridades selecionadas`;
+  updateStartDayCount();
 });
 
 const toggleEl = document.querySelector('#viewModeToggle');

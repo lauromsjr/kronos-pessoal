@@ -258,7 +258,18 @@ Encerrar dia -> registrar resumo, bloqueios e foco de amanhã
 
 Cada dia gera no SQLite um registro único em `daily_reviews`, identificado por `review_date` em `YYYY-MM-DD` no fuso `America/Sao_Paulo`. A rotina usa a Visão Hoje como contexto, incluindo tarefas atrasadas, tarefas de hoje, em andamento, alta prioridade e Agenda hoje.
 
-Esta fase não usa IA, não envia WhatsApp, não cria gráficos semanais e não altera o Kanban.
+### IA para prioridades do dia
+
+O modal **Comecar dia** pode sugerir ate 3 prioridades com IA. Configure no EasyPanel:
+
+```env
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4.1-mini
+```
+
+As sugestoes nao sao salvas automaticamente: o usuario precisa revisar, ajustar e clicar em **Salvar inicio do dia**. O Kronos envia para a IA apenas dados minimos das tarefas candidatas, como `id`, `title`, `company`, `impact`, `status`, `due_date`, `list_type` e progresso de subtarefas.
+
+Esta fase nao envia WhatsApp, nao altera o Kanban e nao altera Google Agenda/OAuth.
 
 **Salvar e iniciar container.**
 
