@@ -114,6 +114,55 @@ function normalizeTask(input: z.infer<typeof taskInput>) {
   };
 }
 
+export async function createTaskWithHistory(
+  db: Awaited<ReturnType<typeof getDb>>,
+  task: ReturnType<typeof normalizeTask>
+) {
+  const result = await db.run(
+    `INSERT INTO tasks (
+      title, company, impact, list_type, status, due_date,
+      sync_to_calendar, calendar_start_time, calendar_duration_min,
+      recurrence_type, recurrence_interval, recurrence_next_date, notes
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    task.title, task.company, task.impact, task.list_type, task.status, task.due_date,
+    task.sync_to_calendar, task.calendar_start_time, task.calendar_duration_min,
+    task.recurrence_type, task.recurrence_interval, task.recurrence_next_date, task.notes
+  );
+
+  await db.run(
+    'INSERT INTO task_status_history (task_id, from_status, to_status) VALUES (?, NULL, ?)',
+    result.lastID, task.status
+  );
+
+  return db.get('SELECT * FROM tasks WHERE id = ?', result.lastID);
+}
+
+export async function createSubtasksForTask(
+  db: Awaited<ReturnType<typeof getDb>>,
+  taskId: number,
+  subtasks: Array<{ title: string; due_date?: string | null; done?: boolean }>
+) {
+  let maxPos = await db.get<{ pos: number }>('SELECT MAX(position) as pos FROM subtasks WHERE task_id = ?', taskId);
+  let position = (maxPos?.pos ?? -1) + 1;
+  const created: any[] = [];
+
+  for (const subtask of subtasks) {
+    const result = await db.run(
+      'INSERT INTO subtasks (task_id, title, done, due_date, position) VALUES (?, ?, ?, ?, ?)',
+      taskId,
+      subtask.title,
+      subtask.done ? 1 : 0,
+      subtask.due_date ?? null,
+      position
+    );
+    position += 1;
+    const row = await db.get('SELECT * FROM subtasks WHERE id = ?', result.lastID);
+    created.push(row);
+  }
+
+  return created;
+}
+
 function csvEscape(value: unknown) {
   if (value === null || value === undefined) return '';
   return `"${String(value).replaceAll('"', '""').replace(/\r?\n/g, '\n')}"`;
@@ -544,23 +593,7 @@ router.post('/tasks', async (req, res, next) => {
     const task = normalizeTask(parsed);
     const db = await getDb();
 
-    const result = await db.run(
-      `INSERT INTO tasks (
-        title, company, impact, list_type, status, due_date,
-        sync_to_calendar, calendar_start_time, calendar_duration_min,
-        recurrence_type, recurrence_interval, recurrence_next_date, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      task.title, task.company, task.impact, task.list_type, task.status, task.due_date,
-      task.sync_to_calendar, task.calendar_start_time, task.calendar_duration_min,
-      task.recurrence_type, task.recurrence_interval, task.recurrence_next_date, task.notes
-    );
-
-    await db.run(
-      'INSERT INTO task_status_history (task_id, from_status, to_status) VALUES (?, NULL, ?)',
-      result.lastID, task.status
-    );
-
-    const created = await db.get('SELECT * FROM tasks WHERE id = ?', result.lastID);
+    const created = await createTaskWithHistory(db, task);
     const synced = await syncTaskCalendarEvent(db, created);
     res.status(201).json({ data: synced.task, calendar_sync_failed: synced.calendarSyncFailed });
   } catch (err) { next(err); }

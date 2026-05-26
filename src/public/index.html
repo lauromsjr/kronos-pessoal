@@ -37,6 +37,7 @@
         </div>
         <div class="topbar-actions">
           <button class="btn-secondary btn-logout" id="logoutBtn" type="button">Sair</button>
+          <button class="btn-secondary" id="openAiTaskModalBtn" type="button">Importar com IA</button>
           <button class="btn-primary" id="addTaskBtn" type="button">+ Adicionar</button>
         </div>
       </header>
@@ -465,6 +466,54 @@
           <button class="btn-secondary" id="cancelCloseDayBtn" type="button">Cancelar</button>
           <button class="btn-primary" type="submit">Salvar encerramento</button>
         </div>
+      </form>
+    </dialog>
+
+    <dialog id="aiTaskModal">
+      <form class="modal ai-task-modal" id="aiTaskForm" method="dialog">
+        <div class="modal-head">
+          <h2>Criar tarefas com IA</h2>
+          <button class="btn-icon" id="closeAiTaskModalBtn" type="button" aria-label="Fechar">x</button>
+        </div>
+
+        <label>
+          Instrucoes para IA
+          <textarea id="aiTaskPromptInput" rows="8" placeholder="Ex: Crie uma tarefa para PlugAI com prazo 10/06/2026..."></textarea>
+        </label>
+
+        <label>
+          Anexo de texto (txt, md, csv)
+          <input id="aiTaskFileInput" type="file" accept=".txt,.md,.csv,text/plain,text/markdown,text/csv" />
+        </label>
+
+        <div class="grid-2">
+          <label>
+            Empresa padrao
+            <select id="aiDefaultCompanyInput">
+              <option value="">Vazio</option>
+              <option>IbogaLiv</option>
+              <option>Olympus</option>
+              <option>PlugAI</option>
+              <option>Pessoal</option>
+            </select>
+          </label>
+          <label>
+            Lista padrao
+            <select id="aiDefaultListInput">
+              <option selected>Tarefa</option>
+              <option>Backlog</option>
+              <option>Ideia</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="modal-actions ai-task-actions">
+          <button class="btn-secondary" id="cancelAiTaskBtn" type="button">Cancelar</button>
+          <button class="btn-secondary" id="analyzeAiTaskBtn" type="button">Analisar com IA</button>
+          <button class="btn-primary" id="commitAiTaskBtn" type="button" disabled>Criar tarefas</button>
+        </div>
+
+        <section id="aiTaskPreview" class="ai-task-preview"></section>
       </form>
     </dialog>
 

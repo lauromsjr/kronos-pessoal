@@ -18,6 +18,7 @@ const state = {
   dailyReviewHistory: [],
   weeklyReport: null,
   aiPrioritySuggestions: {},
+  aiTaskPreview: null,
   todayCollapsed: localStorage.getItem('Kronos_TODAY_COLLAPSED') === 'true',
   activeView: 'execution',
   backupsLoaded: false,
@@ -170,6 +171,7 @@ async function switchView(view) {
   document.querySelector('#executionView').hidden = view !== 'execution';
   document.querySelector('#settingsView').hidden = view !== 'settings';
   document.querySelector('#addTaskBtn').hidden = view !== 'execution' || state.list === 'Concluida';
+  document.querySelector('#openAiTaskModalBtn').hidden = view !== 'execution' || state.list === 'Concluida';
 
   document.querySelectorAll('.app-nav-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.view === view);
@@ -1518,6 +1520,7 @@ async function loadTasks() {
   // Oculta legenda e filtros na aba concluídas
   document.querySelector('#urgencyLegend').style.display = isConcluida ? 'none' : '';
   document.querySelector('#addTaskBtn').hidden = state.activeView !== 'execution' || isConcluida;
+  document.querySelector('#openAiTaskModalBtn').hidden = state.activeView !== 'execution' || isConcluida;
 }
 
 async function loadMoreCompleted() {
@@ -1542,6 +1545,11 @@ async function loadMoreCompleted() {
 
 let currentSubtasks = [];
 let currentTaskId   = null;
+let tempSubtaskId = -1;
+
+function isTemporarySubtask(subtask) {
+  return Boolean(subtask?.temporary) || Number(subtask?.id) < 0;
+}
 
 function updateCompleteTaskButton() {
   const button = document.querySelector('#completeTaskBtn');
@@ -1556,9 +1564,7 @@ function renderSubtaskList() {
   const ul = document.querySelector('#subtaskList');
   const countEl = document.querySelector('#subtasksCount');
   const done = currentSubtasks.filter(s => s.done).length;
-  countEl.textContent = currentSubtasks.length > 0
-    ? `${done}/${currentSubtasks.length}`
-    : '';
+  countEl.textContent = `${done}/${currentSubtasks.length}`;
 
   ul.innerHTML = currentSubtasks.map(sub => {
     const dueClass = sub.due_date ? dueDateClass(sub.due_date) : '';
@@ -1586,12 +1592,24 @@ document.querySelector('#addSubtaskBtn').addEventListener('click', async () => {
   const input = document.querySelector('#newSubtaskInput');
   const dueInput = document.querySelector('#newSubtaskDueDateInput');
   const title = input.value.trim();
-  if (!title || !currentTaskId) return;
-  const result = await api(`/api/tasks/${currentTaskId}/subtasks`, {
-    method: 'POST',
-    body: JSON.stringify({ title, due_date: dueInput.value || null }),
-  });
-  currentSubtasks.push(result.data);
+  if (!title) return;
+
+  if (currentTaskId) {
+    const result = await api(`/api/tasks/${currentTaskId}/subtasks`, {
+      method: 'POST',
+      body: JSON.stringify({ title, due_date: dueInput.value || null }),
+    });
+    currentSubtasks.push(result.data);
+  } else {
+    currentSubtasks.push({
+      id: tempSubtaskId--,
+      title,
+      done: false,
+      due_date: dueInput.value || null,
+      temporary: true,
+    });
+  }
+
   input.value = '';
   dueInput.value = '';
   renderSubtaskList();
@@ -1609,21 +1627,33 @@ document.querySelector('#subtaskList').addEventListener('change', async (e) => {
   const dueId = e.target.dataset.subDueId;
 
   if (toggleId) {
-    const updated = await api(`/api/subtasks/${toggleId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ done: e.target.checked }),
-    });
     const sub = currentSubtasks.find(s => s.id === Number(toggleId));
-    if (sub) Object.assign(sub, updated.data);
+    if (sub) {
+      if (isTemporarySubtask(sub)) {
+        sub.done = Boolean(e.target.checked);
+      } else {
+        const updated = await api(`/api/subtasks/${toggleId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ done: e.target.checked }),
+        });
+        Object.assign(sub, updated.data);
+      }
+    }
   }
 
   if (dueId) {
-    const updated = await api(`/api/subtasks/${dueId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ due_date: e.target.value || null }),
-    });
     const sub = currentSubtasks.find(s => s.id === Number(dueId));
-    if (sub) Object.assign(sub, updated.data);
+    if (sub) {
+      if (isTemporarySubtask(sub)) {
+        sub.due_date = e.target.value || null;
+      } else {
+        const updated = await api(`/api/subtasks/${dueId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ due_date: e.target.value || null }),
+        });
+        Object.assign(sub, updated.data);
+      }
+    }
   }
 
   renderSubtaskList();
@@ -1632,7 +1662,11 @@ document.querySelector('#subtaskList').addEventListener('change', async (e) => {
 document.querySelector('#subtaskList').addEventListener('click', async (e) => {
   const id = e.target.dataset.delSub;
   if (!id) return;
-  await api(`/api/subtasks/${id}`, { method: 'DELETE' });
+  const sub = currentSubtasks.find(s => s.id === Number(id));
+  if (!sub) return;
+  if (!isTemporarySubtask(sub)) {
+    await api(`/api/subtasks/${id}`, { method: 'DELETE' });
+  }
   currentSubtasks = currentSubtasks.filter(s => s.id !== Number(id));
   renderSubtaskList();
 });
@@ -1659,11 +1693,12 @@ function resetForm() {
   document.querySelector('#modalTitle').textContent = 'Nova tarefa';
   document.querySelector('#taskDetail').hidden      = true;
   document.querySelector('#deleteBtn').hidden       = true;
-  document.querySelector('#subtasksSection').style.display = 'none';
+  document.querySelector('#subtasksSection').style.display = '';
   document.querySelector('#newSubtaskInput').value = '';
   document.querySelector('#newSubtaskDueDateInput').value = '';
   currentSubtasks = [];
   currentTaskId   = null;
+  tempSubtaskId = -1;
   updateCompleteTaskButton();
   updateCalendarSyncFields();
   updateRecurrenceFields();
@@ -1735,6 +1770,7 @@ async function saveTask(event) {
   };
 
   let taskId = fields.id.value;
+  const wasExistingTask = Boolean(taskId);
 
   if (taskId) {
     const result = await api(`/api/tasks/${taskId}`, { method: 'PUT', body: JSON.stringify(payload) });
@@ -1745,19 +1781,149 @@ async function saveTask(event) {
     taskId = result.data.id;
     currentTaskId = taskId;
 
-    // Salva subtarefas adicionadas antes do save
     for (const sub of currentSubtasks) {
-      if (!sub.id) {
+      if (isTemporarySubtask(sub)) {
         await api(`/api/tasks/${taskId}/subtasks`, {
           method: 'POST',
-          body: JSON.stringify({ title: sub.title, due_date: sub.due_date || null }),
+          body: JSON.stringify({ title: sub.title, due_date: sub.due_date || null, done: Boolean(sub.done) }),
         });
       }
     }
   }
 
+  if (wasExistingTask && taskId && currentSubtasks.some(isTemporarySubtask)) {
+    for (const sub of currentSubtasks.filter(isTemporarySubtask)) {
+      await api(`/api/tasks/${taskId}/subtasks`, {
+        method: 'POST',
+        body: JSON.stringify({ title: sub.title, due_date: sub.due_date || null, done: Boolean(sub.done) }),
+      });
+    }
+  }
+
   modal.close();
   await loadTasks();
+}
+
+function resetAiTaskModal() {
+  state.aiTaskPreview = null;
+  document.querySelector('#aiTaskPromptInput').value = '';
+  document.querySelector('#aiTaskFileInput').value = '';
+  document.querySelector('#aiDefaultCompanyInput').value = '';
+  document.querySelector('#aiDefaultListInput').value = 'Tarefa';
+  document.querySelector('#commitAiTaskBtn').disabled = true;
+  document.querySelector('#aiTaskPreview').innerHTML = '';
+}
+
+function renderAiTaskPreviewLoading(message) {
+  document.querySelector('#aiTaskPreview').innerHTML = `<p class="ai-task-loading">${escapeHtml(message)}</p>`;
+}
+
+function renderAiTaskPreviewError(message) {
+  document.querySelector('#aiTaskPreview').innerHTML = `<p class="ai-task-error">${escapeHtml(message)}</p>`;
+}
+
+function renderAiTaskPreview() {
+  const preview = state.aiTaskPreview;
+  const el = document.querySelector('#aiTaskPreview');
+  if (!preview) {
+    el.innerHTML = '';
+    return;
+  }
+
+  const warnings = (preview.warnings || []).map((w) => `<li>${escapeHtml(w)}</li>`).join('');
+  const tasks = (preview.tasks || []).map((task) => `
+    <article class="ai-preview-task">
+      <h3>${escapeHtml(task.title)}</h3>
+      <p><strong>Empresa:</strong> ${escapeHtml(task.company || '-')} · <strong>Impacto:</strong> ${escapeHtml(task.impact || '-')} · <strong>Prazo:</strong> ${task.due_date ? escapeHtml(formatDate(task.due_date)) : 'sem prazo'}</p>
+      ${task.notes ? `<p>${escapeHtml(String(task.notes).slice(0, 220))}</p>` : ''}
+      <ul class="ai-preview-subtasks">
+        ${(task.subtasks || []).map((sub) => `<li>${escapeHtml(sub.title)}${sub.due_date ? ` · ${escapeHtml(formatDate(sub.due_date))}` : ''}</li>`).join('')}
+      </ul>
+    </article>
+  `).join('');
+
+  el.innerHTML = `
+    ${warnings ? `<div class="ai-task-warning"><strong>Avisos:</strong><ul>${warnings}</ul></div>` : ''}
+    <div class="ai-preview-list">${tasks || '<p>Nenhuma tarefa identificada.</p>'}</div>
+  `;
+}
+
+async function readAiTaskFile(file) {
+  const allowed = ['.txt', '.md', '.csv'];
+  const lower = file.name.toLowerCase();
+  if (!allowed.some((ext) => lower.endsWith(ext))) {
+    throw new Error('Formato de arquivo nao suportado. Use .txt, .md ou .csv.');
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Nao foi possivel ler o arquivo selecionado.'));
+    reader.readAsText(file);
+  });
+}
+
+async function analyzeTasksWithAi() {
+  const analyzeBtn = document.querySelector('#analyzeAiTaskBtn');
+  const commitBtn = document.querySelector('#commitAiTaskBtn');
+  const promptInput = document.querySelector('#aiTaskPromptInput');
+  const fileInput = document.querySelector('#aiTaskFileInput');
+  const defaultCompany = document.querySelector('#aiDefaultCompanyInput').value || null;
+  const defaultList = document.querySelector('#aiDefaultListInput').value || 'Tarefa';
+  const basePrompt = promptInput.value.trim();
+
+  analyzeBtn.disabled = true;
+  commitBtn.disabled = true;
+  renderAiTaskPreviewLoading('Analisando com IA...');
+
+  try {
+    let prompt = basePrompt;
+    if (fileInput.files?.[0]) {
+      const fileContent = await readAiTaskFile(fileInput.files[0]);
+      prompt = [basePrompt, fileContent].filter(Boolean).join('\n\n');
+    }
+
+    const result = await api('/api/ai/tasks/preview', {
+      method: 'POST',
+      body: JSON.stringify({
+        prompt,
+        default_company: defaultCompany,
+        default_list_type: defaultList,
+      }),
+    });
+
+    state.aiTaskPreview = result.data || null;
+    renderAiTaskPreview();
+    commitBtn.disabled = !(state.aiTaskPreview?.tasks?.length);
+  } catch (err) {
+    renderAiTaskPreviewError(err.message || 'Erro ao analisar tarefas com IA.');
+  } finally {
+    analyzeBtn.disabled = false;
+  }
+}
+
+async function commitAiTasks() {
+  const preview = state.aiTaskPreview;
+  if (!preview?.tasks?.length) return;
+  const subtaskCount = preview.tasks.reduce((acc, task) => acc + (task.subtasks?.length || 0), 0);
+  if (!confirm(`Criar ${preview.tasks.length} tarefas e ${subtaskCount} subtarefas?`)) return;
+
+  const commitBtn = document.querySelector('#commitAiTaskBtn');
+  commitBtn.disabled = true;
+  renderAiTaskPreviewLoading('Criando tarefas...');
+
+  try {
+    const result = await api('/api/ai/tasks/commit', {
+      method: 'POST',
+      body: JSON.stringify({ tasks: preview.tasks }),
+    });
+    document.querySelector('#aiTaskModal').close();
+    alert(`Importacao concluida: ${result.data.created_count} tarefas e ${result.data.created_subtasks_count} subtarefas.`);
+    await loadTasks();
+  } catch (err) {
+    renderAiTaskPreviewError(err.message || 'Erro ao criar tarefas.');
+    commitBtn.disabled = false;
+  }
 }
 
 // ============================================
@@ -1766,12 +1932,30 @@ async function saveTask(event) {
 
 document.querySelector('#addTaskBtn').addEventListener('click', () => {
   resetForm();
-  document.querySelector('#subtasksSection').style.display = 'none';
+  document.querySelector('#subtasksSection').style.display = '';
   modal.showModal();
+});
+document.querySelector('#openAiTaskModalBtn').addEventListener('click', () => {
+  resetAiTaskModal();
+  document.querySelector('#aiTaskModal').showModal();
 });
 
 document.querySelector('#closeModalBtn').addEventListener('click', () => modal.close());
 document.querySelector('#cancelBtn').addEventListener('click',    () => modal.close());
+document.querySelector('#closeAiTaskModalBtn').addEventListener('click', () => document.querySelector('#aiTaskModal').close());
+document.querySelector('#cancelAiTaskBtn').addEventListener('click', () => document.querySelector('#aiTaskModal').close());
+document.querySelector('#analyzeAiTaskBtn').addEventListener('click', analyzeTasksWithAi);
+document.querySelector('#commitAiTaskBtn').addEventListener('click', commitAiTasks);
+document.querySelector('#aiTaskFileInput').addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  try {
+    await readAiTaskFile(file);
+  } catch (err) {
+    renderAiTaskPreviewError(err.message || 'Arquivo invalido.');
+    e.target.value = '';
+  }
+});
 document.querySelector('#completeTaskBtn').addEventListener('click', async () => {
   if (!currentTaskId) return;
   if (!confirm('Marcar esta tarefa como concluída?')) return;
