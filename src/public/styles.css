@@ -587,6 +587,88 @@ h2, h3 { font-family: var(--font-title); }
   min-width: min(680px, calc(100vw - 32px));
 }
 
+.ai-task-modal {
+  min-width: min(920px, calc(100vw - 32px));
+}
+
+.ai-task-actions {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.ai-task-preview {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+  padding: 12px;
+  max-height: 380px;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+}
+
+.ai-task-loading,
+.ai-task-error {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.ai-task-loading {
+  color: var(--muted);
+}
+
+.ai-task-error {
+  color: var(--danger);
+}
+
+.ai-task-warning {
+  border: 1px solid rgba(217,119,6,0.25);
+  border-radius: 8px;
+  background: #FFFBEB;
+  color: #92400E;
+  padding: 10px;
+  font-size: 0.8rem;
+}
+
+.ai-task-warning ul {
+  margin-top: 6px;
+  padding-left: 16px;
+}
+
+.ai-preview-list {
+  display: grid;
+  gap: 8px;
+}
+
+.ai-preview-task {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.ai-preview-task h3 {
+  color: var(--navy);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.ai-preview-task p {
+  color: var(--text-mid);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.ai-preview-subtasks {
+  padding-left: 16px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  display: grid;
+  gap: 3px;
+}
+
 .daily-selection-count {
   color: var(--navy);
   font-family: var(--font-title);
@@ -1966,6 +2048,10 @@ dialog::backdrop {
   .daily-review-actions { justify-content: stretch; display: grid; grid-template-columns: 1fr; }
   .daily-review-actions button { flex: 1; }
   .daily-modal {
+    min-width: 0;
+    width: 100%;
+  }
+  .ai-task-modal {
     min-width: 0;
     width: 100%;
   }

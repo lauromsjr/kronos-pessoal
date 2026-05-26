@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { initTaskSchema } from './database/sqlite';
 import { authRouter } from './modules/auth/auth.routes';
+import { aiTasksRouter } from './modules/ai/aiTasks.routes';
 import { backupRouter } from './modules/backup/backup.routes';
 import { calendarRouter } from './modules/calendar/calendar.routes';
 import { dailyReviewRouter, ensureDailyReviewTable } from './modules/dailyReview/dailyReview.routes';
@@ -29,6 +30,7 @@ async function bootstrap() {
   });
 
   app.use('/api', authRouter);
+  app.use('/api', aiTasksRouter);
   app.use('/api', backupRouter);
   app.use('/api', calendarRouter);
   app.use('/api', dailyReviewRouter);
