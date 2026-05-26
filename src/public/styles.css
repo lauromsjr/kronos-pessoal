@@ -584,11 +584,17 @@ h2, h3 { font-family: var(--font-title); }
 }
 
 .daily-modal {
-  min-width: min(680px, calc(100vw - 32px));
+  width: 100%;
+  min-width: 0;
 }
 
 .ai-task-modal {
-  min-width: min(920px, calc(100vw - 32px));
+  width: 100%;
+  min-width: 0;
+}
+
+#aiTaskModal {
+  width: min(920px, calc(100vw - 32px));
 }
 
 .ai-task-actions {
@@ -1506,7 +1512,12 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold); }
 
 /* ── MODAL ── */
 dialog {
-  width: min(640px, calc(100% - 24px));
+  position: fixed;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 0;
@@ -1520,7 +1531,14 @@ dialog::backdrop {
   backdrop-filter: blur(3px);
 }
 
-.modal { display: grid; gap: 14px; padding: 22px; }
+.modal {
+  display: grid;
+  gap: 14px;
+  padding: 22px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
 
 .modal-head {
   display: flex;
@@ -2003,6 +2021,22 @@ dialog::backdrop {
   .settings-view .backup-panel { grid-row: auto; }
 }
 
+@media (max-width: 720px) {
+  dialog {
+    width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
+  }
+  .modal {
+    padding: 18px;
+    max-height: calc(100dvh - 20px);
+  }
+  .grid-2,
+  .calendar-sync-fields,
+  .recurrence-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 640px) {
   body { overflow-x: hidden; }
   button, input, select, textarea { font-size: 16px; }
@@ -2024,8 +2058,6 @@ dialog::backdrop {
   }
   .app-nav-btn { flex: 1 0 auto; min-width: 138px; }
   .calendar-sync-head { display: grid; }
-  .calendar-sync-fields { grid-template-columns: 1fr; }
-  .recurrence-fields { grid-template-columns: 1fr; }
   .calendar-sync-section,
   .recurrence-section,
   .subtasks-section,
