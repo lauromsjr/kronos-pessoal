@@ -25,7 +25,7 @@ const previewRequestInput = z.object({
 const previewSubtask = z.object({
   title: z.string().trim().min(1).max(200),
   due_date: z.string().nullable().optional(),
-  notes: z.string().max(3000).optional(),
+  notes: z.string().max(3000).nullable().optional(),
 });
 
 const previewTask = z.object({
