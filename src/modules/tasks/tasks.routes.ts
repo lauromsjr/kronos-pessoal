@@ -1,4 +1,4 @@
-﻿import { Router } from 'express';
+import { Router } from 'express';
 import { z } from 'zod';
 import { getDb } from '../../database/sqlite';
 import { requireApiAuth } from '../auth/auth';
@@ -8,9 +8,9 @@ const router = Router();
 const recurrenceTypes = ['none', 'daily', 'weekly', 'monthly'] as const;
 
 const companies  = ['IbogaLiv', 'Olympus', 'PlugAI', 'Pessoal'] as const;
-const impacts    = ['Alto', 'MÃ©dio', 'Baixo'] as const;
+const impacts    = ['Alto', 'Médio', 'Baixo'] as const;
 const listTypes  = ['Tarefa', 'Backlog', 'Ideia'] as const;
-const statuses   = ['A fazer', 'Em andamento', 'ConcluÃ­da', 'Pausada'] as const;
+const statuses   = ['A fazer', 'Em andamento', 'Concluída', 'Pausada'] as const;
 
 const nullableCompany = z.preprocess(
   (value) => value === '' ? null : value,
@@ -63,7 +63,7 @@ const subtaskInput = z.object({
   due_date: nullableDueDate,
 });
 
-// â”€â”€ Init subtasks table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Init subtasks table ──────────────────────────────────────────────────────
 
 export async function ensureSubtasksTable() {
   const db = await getDb();
@@ -87,7 +87,7 @@ export async function ensureSubtasksTable() {
   }
 }
 
-// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function normalizeTask(input: z.infer<typeof taskInput>) {
   const recurrenceType = input.recurrence_type || 'none';
@@ -103,7 +103,7 @@ function normalizeTask(input: z.infer<typeof taskInput>) {
   return {
     title:     input.title,
     company:   input.company ?? null,
-    impact:    input.impact    || 'MÃ©dio',
+    impact:    input.impact    || 'Médio',
     list_type: input.list_type || 'Tarefa',
     status:    input.status    || 'A fazer',
     due_date:  input.due_date ?? null,
@@ -361,7 +361,7 @@ async function getTodayBucket(
 ) {
   const rows = await db.all(
     `SELECT * FROM tasks
-     WHERE status != 'ConcluÃ­da' AND ${where}
+     WHERE status != 'Concluída' AND ${where}
      ORDER BY ${orderBy}`,
     values
   );
@@ -369,7 +369,7 @@ async function getTodayBucket(
   return attachSubtaskCounts(db, rows);
 }
 
-// â”€â”€ GET /tasks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── GET /tasks ───────────────────────────────────────────────────────────────
 
 router.get('/tasks', async (req, res, next) => {
   try {
@@ -380,9 +380,9 @@ router.get('/tasks', async (req, res, next) => {
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
     const isCompletedList = req.query.list === 'Concluida';
 
-    // Aba "ConcluÃ­das" â€” retorna todas concluÃ­das independente de list_type
+    // Aba "Concluídas" — retorna todas concluídas independente de list_type
     if (isCompletedList) {
-      where.push("status = 'ConcluÃ­da'");
+      where.push("status = 'Concluída'");
       for (const [queryKey, column] of Object.entries(filterMap)) {
         if (queryKey === 'list' || queryKey === 'status') continue;
         const value = req.query[queryKey];
@@ -392,8 +392,8 @@ router.get('/tasks', async (req, res, next) => {
         }
       }
     } else {
-      // Nas outras abas, excluir concluÃ­das
-      where.push("status != 'ConcluÃ­da'");
+      // Nas outras abas, excluir concluídas
+      where.push("status != 'Concluída'");
       for (const [queryKey, column] of Object.entries(filterMap)) {
         const value = req.query[queryKey];
         if (typeof value === 'string' && value.trim()) {
@@ -433,7 +433,7 @@ router.get('/tasks', async (req, res, next) => {
            CASE WHEN due_date IS NULL THEN 1 ELSE 0 END,
            due_date ASC,
            CASE status WHEN 'Em andamento' THEN 0 WHEN 'A fazer' THEN 1 WHEN 'Pausada' THEN 2 ELSE 3 END,
-           CASE impact WHEN 'Alto' THEN 0 WHEN 'MÃ©dio' THEN 1 ELSE 2 END,
+           CASE impact WHEN 'Alto' THEN 0 WHEN 'Médio' THEN 1 ELSE 2 END,
            created_at ASC`,
         values
       );
@@ -464,7 +464,7 @@ router.get('/tasks/today', async (_req, res, next) => {
     const today = todayInSaoPaulo();
     const tomorrow = addDays(today, 1);
     const impactStatusOrder = `
-      CASE impact WHEN 'Alto' THEN 0 WHEN 'MÃ©dio' THEN 1 ELSE 2 END,
+      CASE impact WHEN 'Alto' THEN 0 WHEN 'Médio' THEN 1 ELSE 2 END,
       CASE status WHEN 'Em andamento' THEN 0 WHEN 'A fazer' THEN 1 WHEN 'Pausada' THEN 2 ELSE 3 END,
       created_at ASC
     `;
@@ -499,7 +499,7 @@ router.get('/tasks/today', async (_req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// â”€â”€ GET /tasks/export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── GET /tasks/export ────────────────────────────────────────────────────────
 
 router.get('/tasks/stats', async (_req, res, next) => {
   try {
@@ -515,7 +515,7 @@ router.get('/tasks/stats', async (_req, res, next) => {
     const by_status: Record<string, number> = {
       'A fazer': 0,
       'Em andamento': 0,
-      'ConcluÃ­da': 0,
+      'Concluída': 0,
       'Pausada': 0,
     };
     const by_company: Record<string, number> = {
@@ -573,7 +573,7 @@ router.get('/tasks/export', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// â”€â”€ GET /tasks/:id â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── GET /tasks/:id ───────────────────────────────────────────────────────────
 
 router.get('/tasks/:id', async (req, res, next) => {
   try {
@@ -588,7 +588,7 @@ router.get('/tasks/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// â”€â”€ POST /tasks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── POST /tasks ──────────────────────────────────────────────────────────────
 
 router.post('/tasks', async (req, res, next) => {
   try {
@@ -602,7 +602,7 @@ router.post('/tasks', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// â”€â”€ PUT /tasks/:id â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PUT /tasks/:id ───────────────────────────────────────────────────────────
 
 router.put('/tasks/:id', async (req, res, next) => {
   try {
@@ -678,7 +678,7 @@ router.put('/tasks/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// â”€â”€ PATCH /tasks/:id/status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PATCH /tasks/:id/status ──────────────────────────────────────────────────
 
 router.patch('/tasks/:id/status', async (req, res, next) => {
   try {
@@ -692,7 +692,7 @@ router.patch('/tasks/:id/status', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// â”€â”€ DELETE /tasks/:id â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── DELETE /tasks/:id ────────────────────────────────────────────────────────
 
 router.delete('/tasks/bulk', async (req, res, next) => {
   try {
@@ -725,6 +725,7 @@ router.delete('/tasks/bulk', async (req, res, next) => {
     });
   } catch (err) { next(err); }
 });
+
 router.delete('/tasks/:id', async (req, res, next) => {
   try {
     const db = await getDb();
@@ -734,7 +735,7 @@ router.delete('/tasks/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// â”€â”€ SUBTASKS CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── SUBTASKS CRUD ────────────────────────────────────────────────────────────
 
 router.get('/tasks/:id/subtasks', async (req, res, next) => {
   try {
@@ -791,4 +792,3 @@ router.delete('/subtasks/:id', async (req, res, next) => {
 });
 
 export const tasksRouter = router;
-
