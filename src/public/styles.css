@@ -1099,6 +1099,33 @@ h2, h3 { font-family: var(--font-title); }
   border-bottom: 2px solid var(--line);
 }
 
+.bulk-actions-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 12px;
+}
+
+.bulk-actions-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 8px;
+}
+
+.bulk-actions-bar strong {
+  color: var(--navy);
+  font-family: var(--font-title);
+  font-size: 0.76rem;
+  font-weight: 800;
+  margin-right: 2px;
+}
+
 .tabs {
   display: flex;
   gap: 6px;
@@ -1216,6 +1243,30 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold); }
   transition: box-shadow 0.2s, border-color 0.2s;
   position: relative;
   overflow: hidden;
+}
+
+.task-select-box {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.task-select-box input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--danger);
+  cursor: pointer;
+}
+
+.task.task-selected {
+  border-color: rgba(192,57,43,0.36);
+  box-shadow: 0 0 0 2px rgba(192,57,43,0.12);
 }
 
 .task:hover {
@@ -2110,6 +2161,19 @@ dialog::backdrop {
   .settings-actions { display: grid; grid-template-columns: 1fr; }
   .settings-actions button { width: 100%; }
   .toolbar { flex-direction: column; align-items: stretch; gap: 12px; }
+  .bulk-actions-wrap {
+    display: grid;
+    grid-template-columns: 1fr;
+    margin-top: -4px;
+  }
+  .bulk-actions-wrap > .btn-secondary,
+  .bulk-actions-bar button {
+    width: 100%;
+  }
+  .bulk-actions-bar {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
   .tabs {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
