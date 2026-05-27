@@ -53,6 +53,9 @@ const taskUpdate = taskInput.partial().extend({
 });
 
 const statusInput = z.object({ status: z.enum(statuses) });
+const bulkDeleteInput = z.object({
+  ids: z.array(z.number().int().positive()).min(1).max(200),
+});
 
 const subtaskInput = z.object({
   title: z.string().trim().min(1),
@@ -690,6 +693,38 @@ router.patch('/tasks/:id/status', async (req, res, next) => {
 });
 
 // ── DELETE /tasks/:id ────────────────────────────────────────────────────────
+
+router.delete('/tasks/bulk', async (req, res, next) => {
+  try {
+    const parsed = bulkDeleteInput.parse(req.body || {});
+    const ids = [...new Set(parsed.ids)];
+    const db = await getDb();
+    const placeholders = ids.map(() => '?').join(',');
+    const rows = await db.all<{ id: number }[]>(`SELECT id FROM tasks WHERE id IN (${placeholders})`, ids);
+    const existingIds = rows.map((row) => row.id);
+
+    await db.exec('BEGIN TRANSACTION');
+    try {
+      if (existingIds.length) {
+        const existingPlaceholders = existingIds.map(() => '?').join(',');
+        await db.run(`DELETE FROM subtasks WHERE task_id IN (${existingPlaceholders})`, existingIds);
+        await db.run(`DELETE FROM task_status_history WHERE task_id IN (${existingPlaceholders})`, existingIds);
+        await db.run(`DELETE FROM tasks WHERE id IN (${existingPlaceholders})`, existingIds);
+      }
+      await db.exec('COMMIT');
+    } catch (error) {
+      await db.exec('ROLLBACK');
+      throw error;
+    }
+
+    res.json({
+      data: {
+        deleted_count: existingIds.length,
+        ids: existingIds,
+      },
+    });
+  } catch (err) { next(err); }
+});
 
 router.delete('/tasks/:id', async (req, res, next) => {
   try {

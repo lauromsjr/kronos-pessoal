@@ -29,6 +29,8 @@ const state = {
   completedPage: 1,
   completedHasMore: false,
   viewMode: localStorage.getItem('KRONOS_VIEW_MODE') || 'list',
+  selectionMode: false,
+  selectedTaskIds: new Set(),
 };
 
 const board = document.querySelector('#taskBoard');
@@ -184,6 +186,7 @@ async function switchView(view) {
   if (view === 'settings') {
     await loadCalendarStatus();
   }
+  updateBulkActionsBar();
 }
 
 function escapeHtml(v) {
@@ -191,6 +194,76 @@ function escapeHtml(v) {
     .replaceAll('&','&amp;').replaceAll('<','&lt;')
     .replaceAll('>','&gt;').replaceAll('"','&quot;')
     .replaceAll("'",'&#039;');
+}
+
+function selectedCount() {
+  return state.selectedTaskIds.size;
+}
+
+function isTaskSelected(taskId) {
+  return state.selectedTaskIds.has(Number(taskId));
+}
+
+function toggleSelectionMode(forceValue) {
+  state.selectionMode = typeof forceValue === 'boolean' ? forceValue : !state.selectionMode;
+  if (!state.selectionMode) state.selectedTaskIds.clear();
+  updateBulkActionsBar();
+  render();
+}
+
+function toggleTaskSelection(taskId, checked) {
+  const id = Number(taskId);
+  if (!id) return;
+  const shouldSelect = typeof checked === 'boolean' ? checked : !state.selectedTaskIds.has(id);
+  if (shouldSelect) state.selectedTaskIds.add(id);
+  else state.selectedTaskIds.delete(id);
+  updateBulkActionsBar();
+}
+
+function selectVisibleTasks() {
+  state.tasks.forEach((task) => state.selectedTaskIds.add(task.id));
+  updateBulkActionsBar();
+  render();
+}
+
+function clearSelection() {
+  state.selectedTaskIds.clear();
+  updateBulkActionsBar();
+  render();
+}
+
+async function deleteSelectedTasks() {
+  const ids = [...state.selectedTaskIds];
+  if (!ids.length) return;
+  const count = ids.length;
+  if (!confirm(`Excluir ${count} tarefas selecionadas? Esta ação apagará também as subtarefas e histórico dessas tarefas.`)) return;
+  if (count >= 5) {
+    const typed = prompt('Digite EXCLUIR para confirmar esta exclusão em massa:');
+    if (typed !== 'EXCLUIR') return;
+  }
+
+  const result = await api('/api/tasks/bulk', {
+    method: 'DELETE',
+    body: JSON.stringify({ ids }),
+  });
+  alert(`${result.data.deleted_count} tarefas excluídas.`);
+  state.selectedTaskIds.clear();
+  state.selectionMode = false;
+  updateBulkActionsBar();
+  await loadTasks();
+}
+
+function updateBulkActionsBar() {
+  const wrap = document.querySelector('#bulkActionsWrap');
+  const bar = document.querySelector('#bulkActionsBar');
+  const countEl = document.querySelector('#bulkSelectionCount');
+  const toggleBtn = document.querySelector('#toggleSelectionModeBtn');
+  if (!wrap || !bar || !countEl || !toggleBtn) return;
+
+  wrap.hidden = state.activeView !== 'execution';
+  toggleBtn.textContent = state.selectionMode ? 'Cancelar seleção' : 'Selecionar';
+  bar.hidden = !state.selectionMode;
+  countEl.textContent = `${selectedCount()} selecionadas`;
 }
 
 function parseDate(s) {
@@ -1171,6 +1244,10 @@ function renderTaskCard(task, index, isConcluida) {
   const badgeClass = companyClass(task.company);
   const dueHtml = task.due_date ? `<span class="due-date ${dueDateClass(task.due_date)}">${dueDateText(task.due_date)}</span>` : '';
   const recurrenceHtml = recurrenceChip(task);
+  const selectionCheckbox = state.selectionMode
+    ? `<label class="task-select-box"><input type="checkbox" data-select-task-id="${task.id}" ${isTaskSelected(task.id) ? 'checked' : ''} /></label>`
+    : '';
+  const selectedClass = state.selectionMode && isTaskSelected(task.id) ? 'task-selected' : '';
 
   // Barra de progresso de subtarefas
   const total = task.subtasks_total || 0;
@@ -1193,7 +1270,8 @@ function renderTaskCard(task, index, isConcluida) {
   if (isConcluida) {
     const completedStr = task.completed_at ? formatDate(task.completed_at) : '';
     return `
-      <article class="task task-concluida" data-impact="${task.impact}">
+      <article class="task task-concluida ${selectedClass}" data-impact="${task.impact}">
+        ${selectionCheckbox}
         <span class="priority-num">${num}</span>
         <div class="task-meta">
           <span class="badge ${badgeClass}">${company}</span>
@@ -1213,7 +1291,8 @@ function renderTaskCard(task, index, isConcluida) {
   }
 
   return `
-    <article class="task" data-impact="${task.impact}">
+    <article class="task ${selectedClass}" data-impact="${task.impact}">
+      ${selectionCheckbox}
       <span class="priority-num">${num}</span>
       <div class="task-meta">
         <span class="badge ${badgeClass}">${company}</span>
@@ -1286,6 +1365,10 @@ function renderKanbanCard(task, index) {
   const badgeClass = companyClass(task.company);
   const dueHtml = task.due_date ? `<span class="due-date ${dueDateClass(task.due_date)}">${dueDateText(task.due_date)}</span>` : '';
   const recurrenceHtml = recurrenceChip(task);
+  const selectionCheckbox = state.selectionMode
+    ? `<label class="task-select-box"><input type="checkbox" data-select-task-id="${task.id}" ${isTaskSelected(task.id) ? 'checked' : ''} /></label>`
+    : '';
+  const selectedClass = state.selectionMode && isTaskSelected(task.id) ? 'task-selected' : '';
 
   const total = task.subtasks_total || 0;
   const done  = task.subtasks_done  || 0;
@@ -1305,7 +1388,8 @@ function renderKanbanCard(task, index) {
   ` : '';
 
   return `
-    <article class="task kanban-card" data-impact="${task.impact}" draggable="true" data-task-id="${task.id}">
+    <article class="task kanban-card ${selectedClass}" data-impact="${task.impact}" draggable="${state.selectionMode ? 'false' : 'true'}" data-task-id="${task.id}">
+      ${selectionCheckbox}
       <span class="kanban-drag-handle" aria-hidden="true" title="Arrastar">⋮⋮</span>
       <span class="priority-num">${index + 1}</span>
       <div class="task-meta">
@@ -1475,6 +1559,7 @@ function updateToggleButtons() {
 }
 
 function render() {
+  updateBulkActionsBar();
   const isConcluida = state.list === 'Concluida';
   if (!isConcluida && state.viewMode === 'kanban') {
     renderKanban();
@@ -1496,6 +1581,8 @@ async function loadTasks() {
 
   const result = await api(`/api/tasks?${qs(params)}`);
   state.tasks = result.data;
+  const visibleIds = new Set((state.tasks || []).map((task) => task.id));
+  state.selectedTaskIds = new Set([...state.selectedTaskIds].filter((id) => visibleIds.has(id)));
   state.completedHasMore = Boolean(result.pagination?.has_more);
   await loadAllTasks();
   await loadStats();
@@ -1521,6 +1608,7 @@ async function loadTasks() {
   document.querySelector('#urgencyLegend').style.display = isConcluida ? 'none' : '';
   document.querySelector('#addTaskBtn').hidden = state.activeView !== 'execution' || isConcluida;
   document.querySelector('#openAiTaskModalBtn').hidden = state.activeView !== 'execution' || isConcluida;
+  updateBulkActionsBar();
 }
 
 async function loadMoreCompleted() {
@@ -2135,6 +2223,13 @@ fields.recurrenceType.addEventListener('change', updateRecurrenceFields);
 fields.recurrenceInterval.addEventListener('input', updateRecurrenceFields);
 
 board.addEventListener('change', async (e) => {
+  const selectTaskId = e.target.dataset.selectTaskId;
+  if (selectTaskId) {
+    toggleTaskSelection(Number(selectTaskId), Boolean(e.target.checked));
+    render();
+    return;
+  }
+
   const id = e.target.dataset.statusId;
   if (!id) return;
   await api(`/api/tasks/${id}/status`, {
@@ -2154,6 +2249,19 @@ document.querySelector('#todayGrid').addEventListener('click', async (e) => {
   const id = e.target.dataset.openId;
   if (!id) return;
   await openTask(Number(id));
+});
+
+document.querySelector('#toggleSelectionModeBtn').addEventListener('click', () => {
+  toggleSelectionMode();
+});
+document.querySelector('#selectVisibleTasksBtn').addEventListener('click', () => {
+  selectVisibleTasks();
+});
+document.querySelector('#clearSelectionBtn').addEventListener('click', () => {
+  clearSelection();
+});
+document.querySelector('#deleteSelectedTasksBtn').addEventListener('click', async () => {
+  await deleteSelectedTasks();
 });
 
 setInterval(render, 60000);
