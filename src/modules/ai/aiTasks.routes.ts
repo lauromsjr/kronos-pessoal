@@ -77,6 +77,94 @@ function normalizeImpact(value: string | null | undefined): (typeof impacts)[num
   return 'Médio';
 }
 
+type ExtractedSubtaskDate = {
+  due_date: string | null;
+  raw_due_text?: string | null;
+};
+
+type ExtractedTaskDates = {
+  code: string;
+  due_date: string | null;
+  raw_due_text?: string | null;
+  subtasks: ExtractedSubtaskDate[];
+};
+
+function parseTaskCodeFromText(value: string | null | undefined) {
+  if (!value) return null;
+  const match = String(value).match(/\b(T\d{1,3})\b/i);
+  return match ? match[1].toUpperCase() : null;
+}
+
+function isDateBr(value: string) {
+  return /^\d{2}\/\d{2}\/\d{4}$/.test(value.trim());
+}
+
+function isTextualFutureDeadline(value: string) {
+  return /futuro|ap[oó]s|depois|quando|conclu[ií]d[oa]/i.test(value.trim());
+}
+
+function extractDatesFromPrompt(prompt: string) {
+  const lines = prompt.split(/\r?\n/).map((line) => line.trim());
+  const byCode = new Map<string, ExtractedTaskDates>();
+  let currentCode: string | null = null;
+  let pendingSubtaskIndex: number | null = null;
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!line) continue;
+
+    const codeMatch = line.match(/\b(T\d{1,3})\b/i);
+    if (codeMatch) {
+      currentCode = codeMatch[1].toUpperCase();
+      if (!byCode.has(currentCode)) {
+        byCode.set(currentCode, { code: currentCode, due_date: null, subtasks: [] });
+      }
+      pendingSubtaskIndex = null;
+      continue;
+    }
+
+    if (!currentCode) continue;
+    const current = byCode.get(currentCode)!;
+
+    if (/^prazo\s*:/i.test(line)) {
+      const after = line.split(':').slice(1).join(':').trim();
+      if (isDateBr(after) && !current.due_date) {
+        current.due_date = normalizeDueDate(after);
+      } else if (isTextualFutureDeadline(after) && !current.raw_due_text) {
+        current.raw_due_text = after;
+      }
+      continue;
+    }
+
+    if (line.startsWith('↳')) {
+      current.subtasks.push({ due_date: null });
+      pendingSubtaskIndex = current.subtasks.length - 1;
+      continue;
+    }
+
+    if (pendingSubtaskIndex !== null) {
+      if (isDateBr(line)) {
+        current.subtasks[pendingSubtaskIndex].due_date = normalizeDueDate(line);
+      } else if (isTextualFutureDeadline(line)) {
+        current.subtasks[pendingSubtaskIndex].raw_due_text = line;
+      }
+      pendingSubtaskIndex = null;
+      continue;
+    }
+
+    if (!current.due_date && isDateBr(line)) {
+      const prev = lines[i - 1] || '';
+      if (/prioridade|prazo|^t\d{1,3}\b/i.test(prev) || !prev) {
+        current.due_date = normalizeDueDate(line);
+      }
+    } else if (!current.raw_due_text && isTextualFutureDeadline(line)) {
+      current.raw_due_text = line;
+    }
+  }
+
+  return byCode;
+}
+
 function taskDedupKey(task: z.infer<typeof previewTask>) {
   if (task.source_code) return task.source_code.toLowerCase();
   return task.title.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -113,6 +201,57 @@ function parseAiJson(content: string) {
   return JSON.parse(fenced ? fenced[1] : trimmed);
 }
 
+function appendNote(base: string | null | undefined, extra: string) {
+  const current = (base || '').trim();
+  if (!current) return extra;
+  if (current.includes(extra)) return current;
+  return `${current}\n${extra}`;
+}
+
+function repairDatesFromPrompt(
+  normalized: ReturnType<typeof finalizePreview>,
+  prompt: string
+) {
+  const extractedByCode = extractDatesFromPrompt(prompt);
+  const repairedTasks = normalized.tasks.map((task) => {
+    const code = parseTaskCodeFromText(task.source_code) || parseTaskCodeFromText(task.title);
+    if (!code) return task;
+
+    const extracted = extractedByCode.get(code);
+    if (!extracted) return task;
+
+    let notes = task.notes || null;
+    if (!task.due_date && extracted.due_date) {
+      task.due_date = extracted.due_date;
+    }
+    if (!task.due_date && extracted.raw_due_text) {
+      notes = appendNote(notes, `Prazo textual original: ${extracted.raw_due_text}`);
+    }
+
+    task.subtasks = (task.subtasks || []).map((subtask, index) => {
+      const extractedSub = extracted.subtasks[index];
+      if (!extractedSub) return subtask;
+      if (!subtask.due_date && extractedSub.due_date) {
+        return { ...subtask, due_date: extractedSub.due_date };
+      }
+      if (!subtask.due_date && extractedSub.raw_due_text) {
+        notes = appendNote(notes, `Subtarefa "${subtask.title}": Prazo textual original: ${extractedSub.raw_due_text}`);
+      }
+      return subtask;
+    });
+
+    return {
+      ...task,
+      notes,
+    };
+  });
+
+  return {
+    ...normalized,
+    tasks: repairedTasks,
+  };
+}
+
 async function callOpenAi(payload: { prompt: string; default_company?: string | null; default_list_type?: string | null }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -131,7 +270,7 @@ async function callOpenAi(payload: { prompt: string; default_company?: string | 
       messages: [
         {
           role: 'system',
-          content: 'Você é um parser de tarefas para o sistema Kronos. Sua função é transformar comandos e planejamentos em JSON estruturado de tarefas e subtarefas. Não execute ações fora do JSON. Não invente dados ausentes. Quando houver dúvida, use notes e warnings. Responda somente JSON válido no formato {"tasks":[{"title":"string","company":"IbogaLiv|Olympus|PlugAI|Pessoal|null","impact":"Alto|Médio|Baixo|null","list_type":"Tarefa|Backlog|Ideia|null","status":"A fazer|Em andamento|Concluída|Pausada|null","due_date":"YYYY-MM-DD|DD/MM/YYYY|null","notes":"string|null","source_code":"T5|T6|...|null","subtasks":[{"title":"string","due_date":"YYYY-MM-DD|DD/MM/YYYY|null","notes":"string|null"}]}],"warnings":["string"]}. Cada linha iniciando com ↳ deve virar subtarefa da tarefa principal anterior.'
+          content: 'Você é um parser de tarefas para o sistema Kronos. Sua função é transformar comandos e planejamentos em JSON estruturado de tarefas e subtarefas. Não execute ações fora do JSON. Não invente dados ausentes. Quando houver dúvida, use notes e warnings. Regras de data: DD/MM/YYYY deve virar YYYY-MM-DD. Linha "Prazo:" indica data da tarefa principal. Se uma linha iniciando com ↳ for seguida por uma linha DD/MM/YYYY, essa data pertence à subtarefa. Não deixe due_date como null quando houver data explícita. Responda somente JSON válido no formato {"tasks":[{"title":"string","company":"IbogaLiv|Olympus|PlugAI|Pessoal|null","impact":"Alto|Médio|Baixo|null","list_type":"Tarefa|Backlog|Ideia|null","status":"A fazer|Em andamento|Concluída|Pausada|null","due_date":"YYYY-MM-DD|DD/MM/YYYY|null","notes":"string|null","source_code":"T5|T6|...|null","subtasks":[{"title":"string","due_date":"YYYY-MM-DD|DD/MM/YYYY|null","notes":"string|null"}]}],"warnings":["string"]}. Cada linha iniciando com ↳ deve virar subtarefa da tarefa principal anterior.'
         },
         {
           role: 'user',
@@ -203,10 +342,11 @@ router.post('/ai/tasks/preview', async (req, res, next) => {
     const raw = await callOpenAi(parsed);
     const validated = previewResponse.parse(raw);
     const normalized = finalizePreview(validated, parsed);
-    if (normalized.tasks.length > 100) {
+    const repaired = repairDatesFromPrompt(normalized, parsed.prompt);
+    if (repaired.tasks.length > 100) {
       return res.status(400).json({ error: 'Limite excedido: máximo de 100 tarefas por importação.' });
     }
-    return res.json({ data: normalized });
+    return res.json({ data: repaired });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro ao gerar preview com IA.';
     if (message === 'IA não configurada.') return res.status(400).json({ error: message });

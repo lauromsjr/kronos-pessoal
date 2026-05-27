@@ -1834,10 +1834,10 @@ function renderAiTaskPreview() {
   const tasks = (preview.tasks || []).map((task) => `
     <article class="ai-preview-task">
       <h3>${escapeHtml(task.title)}</h3>
-      <p><strong>Empresa:</strong> ${escapeHtml(task.company || '-')} · <strong>Impacto:</strong> ${escapeHtml(task.impact || '-')} · <strong>Prazo:</strong> ${task.due_date ? escapeHtml(formatDate(task.due_date)) : 'sem prazo'}</p>
+      <p><strong>Empresa:</strong> ${escapeHtml(task.company || '-')} · <strong>Impacto:</strong> ${escapeHtml(task.impact || '-')} · <strong>Prazo da tarefa:</strong> ${task.due_date ? escapeHtml(formatDate(task.due_date)) : 'sem prazo'}</p>
       ${task.notes ? `<p>${escapeHtml(String(task.notes).slice(0, 220))}</p>` : ''}
       <ul class="ai-preview-subtasks">
-        ${(task.subtasks || []).map((sub) => `<li>${escapeHtml(sub.title)}${sub.due_date ? ` · ${escapeHtml(formatDate(sub.due_date))}` : ''}</li>`).join('')}
+        ${(task.subtasks || []).map((sub) => `<li>${escapeHtml(sub.title)} · <strong>Prazo:</strong> ${sub.due_date ? escapeHtml(formatDate(sub.due_date)) : 'sem prazo'}</li>`).join('')}
       </ul>
     </article>
   `).join('');
