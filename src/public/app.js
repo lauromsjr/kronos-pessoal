@@ -266,9 +266,27 @@ function updateBulkActionsBar() {
   countEl.textContent = `${selectedCount()} selecionadas`;
 }
 
+const SAO_PAULO_TZ = 'America/Sao_Paulo';
+const CIVIL_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseCivilDateParts(value) {
+  const [year, month, day] = String(value || '').split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return { year, month, day };
+}
+
+function civilDateAtSaoPauloNoon(value) {
+  const parts = parseCivilDateParts(value);
+  if (!parts) return null;
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day, 15, 0, 0));
+}
+
 function parseDate(s) {
   if (!s) return null;
-  return new Date(String(s).includes('T') ? s : `${s}Z`);
+  const value = String(s).trim();
+  if (!value) return null;
+  if (CIVIL_DATE_RE.test(value)) return civilDateAtSaoPauloNoon(value);
+  return new Date(value);
 }
 
 function daysSince(dateStr) {
@@ -309,15 +327,36 @@ function formatDuration(minutes) {
 }
 
 function formatDate(dateStr) {
-  const d = parseDate(dateStr);
-  if (!d) return '';
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  if (!dateStr) return '';
+  const value = String(dateStr).trim();
+
+  if (CIVIL_DATE_RE.test(value)) {
+    const parts = parseCivilDateParts(value);
+    if (!parts) return '';
+    return `${String(parts.day).padStart(2, '0')}/${String(parts.month).padStart(2, '0')}/${parts.year}`;
+  }
+
+  const d = parseDate(value);
+  if (!d || Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('pt-BR', {
+    timeZone: SAO_PAULO_TZ,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
 }
 
 function formatDateTime(dateStr) {
   const d = parseDate(dateStr);
-  if (!d) return '';
-  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  if (!d || Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString('pt-BR', {
+    timeZone: SAO_PAULO_TZ,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function dateKeySaoPaulo(date) {
@@ -369,10 +408,11 @@ function companyClass(company) {
 
 function dueDateClass(dueDate) {
   if (!dueDate) return '';
-  const today = new Date();
-  const current = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const due = new Date(`${dueDate}T00:00:00`);
-  const diff = Math.round((due.getTime() - current.getTime()) / 86400000);
+  const due = civilDateAtSaoPauloNoon(dueDate);
+  const today = civilDateAtSaoPauloNoon(dateKeySaoPaulo(new Date()));
+  if (!due || !today) return '';
+
+  const diff = Math.round((due.getTime() - today.getTime()) / 86400000);
   if (diff < 0) return 'overdue';
   if (diff === 0) return 'today';
   return '';
@@ -397,14 +437,16 @@ function recurrenceChip(task) {
 }
 
 function addMonthsToDate(dateStr, months) {
-  const date = new Date(`${dateStr}T12:00:00`);
-  date.setMonth(date.getMonth() + months);
+  const parts = parseCivilDateParts(dateStr);
+  if (!parts) return '';
+  const date = new Date(Date.UTC(parts.year, parts.month - 1 + Number(months || 0), parts.day, 15, 0, 0));
   return dateKeySaoPaulo(date);
 }
 
 function addDays(dateStr, days) {
-  const date = new Date(`${dateStr}T12:00:00`);
-  date.setDate(date.getDate() + days);
+  const date = civilDateAtSaoPauloNoon(dateStr);
+  if (!date) return '';
+  date.setUTCDate(date.getUTCDate() + Number(days || 0));
   return dateKeySaoPaulo(date);
 }
 
